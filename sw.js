@@ -1,6 +1,6 @@
 // Lunchfound 서비스워커 — 앱으로 설치(PWA), 오프라인 대비, 알림 클릭 처리
 // 앱 파일을 고치면 아래 VERSION 숫자만 올려주세요. 다음 접속 때 새 버전으로 바뀌어요.
-const VERSION = "lunchfound-v3";
+const VERSION = "lunchfound-v5";
 const SHELL = ["./", "./index.html", "./styles.css", "./config.js", "./members.js", "./seeds.js", "./store.js", "./walk.js", "./map-kakao.js", "./map-libre.js", "./app.js", "./walk-graph.json", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/favicon.svg", "./brand/logo-black.png", "./brand/logo-white.png", "./brand/mark-black.png"];
 
 self.addEventListener("install", (e) => {

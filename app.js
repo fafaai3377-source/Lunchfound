@@ -913,6 +913,7 @@
     const s = showSheet(`
       ${head("내 정보")}
       <div class="list-card" style="background:var(--parchment);margin-top:14px"><div class="member">${avatar(state.user.name)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(state.user.name)}님</div><div class="rl">${esc(m.role)}</div></div></div></div>
+      <div class="field"><span class="flabel">화면 모드</span>${themeSeg()}</div>
       <div class="stack" style="margin-top:18px">
         <button class="btn btn-plain btn-block" id="installBtn">📲 앱으로 설치 (홈 화면에 추가)</button>
         ${state.store.demo ? `<div class="h3" style="margin-top:14px">알림 미리보기</div><div class="btns"><button class="btn btn-plain" id="pvPopular">12시 인기 장소</button><button class="btn btn-plain" id="pvRecord">점심 후 기록 요청</button></div>
@@ -921,6 +922,7 @@
       </div>`, "me");
     const lo = $("#logout", s); if (lo) lo.onclick = async () => { await state.store.signOut(); location.reload(); };
     $("#installBtn", s).onclick = openInstall;
+    bindThemeSeg(s);
     const pp = $("#pvPopular", s); if (pp) pp.onclick = () => { closeSheet(); nudgePopular(); };
     const pr2 = $("#pvRecord", s); if (pr2) pr2.onclick = () => { closeSheet(); nudgeRecord(); };
     const pi = $("#pvIntro", s); if (pi) pi.onclick = () => { closeSheet(); showIntro(() => { $("#app").hidden = false; }); };
@@ -929,47 +931,51 @@
   }
 
   // ───────── 로그인 · 멤버 고르기 ─────────
-  function showLogin({ google, error }) {
+  // 로그인 창: 이름 + 비밀번호 (멤버 명단은 로그인 전에 보여주지 않음)
+  // 관리자는 이름에 admin, 비밀번호에 관리자 비밀번호
+  function showLogin({ error } = {}) {
     $("#app").hidden = true; $("#intro").hidden = true; $("#login").hidden = false;
-    const groups = ["디렉터", "임직원"].map((g) => {
-      const ms = MEMBERS.filter((m) => m.group === g);
-      return `<div class="group-label">${g} (${ms.length})</div><div class="list-card">${ms.map((m) => `<button class="member" data-member="${esc(m.name)}">${avatar(m.name)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(m.name)}님</div><div class="rl">${esc(m.role)}</div></div><span class="chev">›</span></button>`).join("")}</div>`;
-    }).join("");
-    $("#loginBody").innerHTML = google
-      ? `<button class="btn btn-primary btn-block" id="gBtn">Google 계정으로 시작하기</button><p class="login-err">${esc(error || "")}</p>`
-      : `<h2 class="picker-title">나는 누구예요?</h2><p class="picker-sub">기록에 이 이름이 표시돼요. 한 번만 고르면 돼요.</p>${groups}<p class="login-err">${esc(error || "")}</p>
-         <div class="admin-entry"><button class="link" data-member="admin">관리자 로그인</button></div>
-         ${state.store.demo ? `<p class="demo-note">미리보기 버전이에요. 실제 버전은 이름 + 공용 비밀번호로 로그인하고, 기록이 멤버 모두에게 공유돼요.</p>` : ""}`;
-    const g = $("#gBtn"); if (g) g.onclick = async () => { try { await state.store.signIn(); } catch (e) { $(".login-err").textContent = "로그인 창이 닫혔거나 팝업이 차단됐어요."; } };
-    $$("[data-member]").forEach((b) => (b.onclick = () => window.__pickMember?.(b.dataset.member)));
-  }
-
-  // 공용 비밀번호 입력 단계 (실제 버전)
-  function showPassword(name) {
-    const adm = name === "admin";
-    const m = adm ? { team: "ADMIN", role: "장소·기록·약속을 지우고 고칠 수 있어요" } : member(name) || { team: "", role: "" };
-    const shown = adm ? "관리자" : name;
+    const demo = !state.store.needsPassword;
     $("#loginBody").innerHTML = `
-      <h2 class="picker-title">${adm ? "관리자 로그인" : "비밀번호를 입력해 주세요"}</h2>
-      <p class="picker-sub">${adm ? "관리자 비밀번호를 입력해 주세요." : "파파 공용 비밀번호예요. 한 번 로그인하면 이 기기에서 계속 유지돼요."}</p>
-      <div class="list-card"><div class="member">${avatar(shown)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(shown)}${adm ? "" : "님"}</div><div class="rl">${esc(m.role)}</div></div><button class="link" id="pwBack" type="button">다른 이름</button></div></div>
-      <form id="pwForm" class="field" autocomplete="on">
-        <input type="text" name="username" value="${esc(name)}" autocomplete="username" hidden />
-        <input class="input" id="pw" type="password" autocomplete="current-password" placeholder="${adm ? "관리자 비밀번호" : "공용 비밀번호"}" aria-label="비밀번호" />
-        <div class="stack" style="margin-top:12px"><button class="btn btn-primary btn-block" id="pwGo" type="submit">로그인</button></div>
+      <form id="loginForm" class="login-form" autocomplete="on" novalidate>
+        <label class="flabel" for="loginName">이름</label>
+        <input class="input" id="loginName" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="예: 태영" maxlength="20" />
+        <label class="flabel" for="loginPw" style="margin-top:14px">비밀번호</label>
+        <input class="input" id="loginPw" name="password" type="password" autocomplete="current-password" placeholder="${demo ? "미리보기에서는 비워도 돼요" : "공용 비밀번호"}" />
+        <div class="stack" style="margin-top:18px"><button class="btn btn-primary btn-block" id="loginGo" type="submit">로그인</button></div>
+        <p class="login-err" id="loginErr" role="alert">${esc(error || "")}</p>
       </form>
-      <p class="login-err" id="pwErr" role="alert"></p>`;
-    const pw = $("#pw"), go = $("#pwGo");
-    setTimeout(() => pw.focus(), 50);
-    $("#pwBack").onclick = () => showLogin({ google: false });
-    $("#pwForm").onsubmit = async (e) => {
+      <p class="login-help">파파 멤버만 쓸 수 있어요. 이름은 사내에서 부르는 이름 그대로(예: 태영) 적어 주세요.<br />한 번 로그인하면 이 기기에서 계속 유지돼요.</p>
+      ${demo ? `<p class="demo-note">미리보기 버전이에요. 실제 버전은 공용 비밀번호로 로그인하고, 기록이 멤버 모두에게 공유돼요.</p>` : ""}`;
+    const nm = $("#loginName"), pw = $("#loginPw"), go = $("#loginGo"), er = $("#loginErr");
+    setTimeout(() => nm.focus(), 60);
+    $("#loginForm").onsubmit = async (e) => {
       e.preventDefault();
-      if (!pw.value) { $("#pwErr").textContent = "비밀번호를 입력해 주세요."; return; }
-      go.disabled = true; go.textContent = "확인 중…"; $("#pwErr").textContent = "";
-      try { await state.store.signIn(name, pw.value); }
-      catch (err) { $("#pwErr").textContent = err.userMsg || "로그인하지 못했어요."; go.disabled = false; go.textContent = "로그인"; pw.select(); }
+      let name = nm.value.trim().replace(/\s+/g, "").replace(/님$/, "");
+      const isAdm = name.toLowerCase() === "admin" || name === "관리자";
+      if (!name) { er.textContent = "이름을 적어 주세요."; nm.focus(); return; }
+      if (!isAdm && !member(name)) { er.textContent = "명단에 없는 이름이에요. 사내에서 부르는 이름(예: 태영)으로 적어 주세요."; nm.select(); return; }
+      if (!demo && !pw.value) { er.textContent = "비밀번호를 입력해 주세요."; pw.focus(); return; }
+      go.disabled = true; go.textContent = "확인 중…"; er.textContent = "";
+      try { await state.store.signIn(isAdm ? (demo ? "관리자" : "admin") : name, pw.value); }
+      catch (err) { er.textContent = err.userMsg || "로그인하지 못했어요."; go.disabled = false; go.textContent = "로그인"; pw.select(); }
     };
   }
+
+
+  // ───────── 화면 모드 (라이트 / 다크 / 기기 설정) ─────────
+  const THEMES = { light: "라이트", dark: "다크", system: "기기 설정" };
+  const themePref = () => { try { return localStorage.getItem("lunchfound-theme") || "light"; } catch { return "light"; } };
+  function applyTheme(pref) {
+    try { localStorage.setItem("lunchfound-theme", pref); } catch {}
+    const dark = pref === "dark" || (pref === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1C1C1E" : "#F5F4F1");
+    const lb = $("#themeBtnLogin"); if (lb) lb.textContent = `${dark ? "🌙" : "☀️"} ${THEMES[pref]}`;
+  }
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (themePref() === "system") applyTheme("system"); });
+  const themeSeg = () => `<div class="seg" id="themeSeg" role="group" aria-label="화면 모드">${Object.entries(THEMES).map(([k, v]) => `<button data-th="${k}" aria-pressed="${themePref() === k}">${v}</button>`).join("")}</div>`;
+  const bindThemeSeg = (root) => $$("[data-th]", root).forEach((b) => (b.onclick = () => { applyTheme(b.dataset.th); $$("[data-th]", root).forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
 
   // ───────── 기타 ─────────
   let tt;
@@ -1045,6 +1051,8 @@
     $("#loginBrand").innerHTML = brand; $("#brand").setAttribute("aria-label", C.appTitle || n);
     document.title = C.appTitle || n;
     initPress();
+    applyTheme(themePref());
+    $("#themeBtnLogin").onclick = () => { const order = ["light", "dark", "system"]; applyTheme(order[(order.indexOf(themePref()) + 1) % 3]); };
     // 스플래시: 최소 0.9초 보여준 뒤 부드럽게 사라짐 (그동안 데이터 준비)
     const t0 = performance.now(), sp = $("#splash");
     const hideSplash = () => { if (!sp) return; setTimeout(() => { sp.classList.add("hide"); setTimeout(() => sp.remove(), 400); }, Math.max(0, 900 - (performance.now() - t0))); };
@@ -1055,9 +1063,7 @@
       if (started) return;
       if (!u) {
         const login = () => {
-          // 이름 고르기 → (실제 버전) 공용 비밀번호 입력 → 로그인
-          window.__pickMember = (name) => (state.store.needsPassword ? showPassword(name) : state.store.signIn(name === "admin" ? "관리자" : name));
-          showLogin({ google: false, error: err });
+          showLogin({ error: err });
         };
         if (err) return login();
         return showIntro(login);   // 로그인 전 첫 화면: 모션그래픽 소개
@@ -1065,7 +1071,7 @@
       const prof = await state.store.getProfile(u.uid);
       if (prof?.memberName && (member(prof.memberName) || prof.admin)) { started = true; return start({ ...u, name: prof.memberName, admin: !!prof.admin }); }
       window.__pickMember = async (name) => { await state.store.setProfile(u.uid, name); started = true; start({ ...u, name }); };
-      showLogin({ google: false });
+      showLogin();
     });
   })();
 })();

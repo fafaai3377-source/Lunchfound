@@ -509,3 +509,13 @@ input { font: inherit; color: inherit; }
 .admin-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; padding: 12px 14px; border-radius: var(--r-md); background: var(--parchment); }
 .admin-tag { font-size: 11px; font-weight: 700; color: #fff; background: var(--ink); padding: 2px 8px; border-radius: 9999px; }
 .link.danger { color: #FF3B30; }
+
+/* 화면 모드 (index.html 앞부분에서 data-theme를 정함: light / dark) */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="dark"] .logo, :root[data-theme="dark"] .logo-mark { filter: invert(1); }
+:root[data-theme="dark"] .splash .logo, :root[data-theme="dark"] .splash img { filter: none; }
+.theme-btn { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 14px); right: 16px; z-index: 5; height: 36px; padding: 0 12px; border-radius: 9999px; background: var(--fill); color: var(--ink); font-size: 13px; font-weight: 600; }
+.login-form { margin-top: 4px; }
+.login-form .flabel { margin-left: 2px; }
+.login-help { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin-top: 18px; }
