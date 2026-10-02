@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#F5F4F1" />
+  <title>Lunchfound</title>
+  <meta name="description" content="우리 팀이 직접 가본 사옥 근처 밥집 지도" />
+  <!-- 앱으로 설치 (PWA) -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+  <link rel="alternate icon" href="./icons/favicon.ico" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <!-- 아이폰 홈 화면 앱 시작 화면 (버건디 + 흰 로고) -->
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1290x2796.png" />
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1179x2556.png" />
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1170x2532.png" />
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1125x2436.png" />
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1242x2688.png" />
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash/splash-828x1792.png" />
+  <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash/splash-750x1334.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Lunchfound" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- 스플래시: 앱을 열면 1초 정도 보였다가 사라짐 -->
+  <div id="splash" class="splash" aria-hidden="true"><img src="./brand/logo-white.png" alt="" /></div>
+  <!-- 첫 화면 소개 (모션그래픽 · config.js의 introVideo를 넣으면 영상으로 바뀜) -->
+  <section id="intro" class="intro" hidden>
+    <div class="intro-inner">
+      <div class="intro-stage" aria-hidden="true">
+        <video id="introVideo" class="intro-video" muted playsinline loop autoplay hidden></video>
+        <svg class="intro-svg" viewBox="0 0 320 320" preserveAspectRatio="xMidYMid slice">
+          <g class="blds">
+            <rect class="bld" style="--d:.35s" x="40" y="40" width="70" height="48" rx="4" />
+            <rect class="bld" style="--d:.42s" x="196" y="36" width="80" height="56" rx="4" />
+            <rect class="bld" style="--d:.5s" x="30" y="196" width="60" height="70" rx="4" />
+            <rect class="bld" style="--d:.56s" x="206" y="214" width="78" height="60" rx="4" />
+            <rect class="bld" style="--d:.62s" x="120" y="236" width="58" height="52" rx="4" />
+            <rect class="bld" style="--d:.68s" x="124" y="58" width="50" height="40" rx="4" />
+          </g>
+          <g class="roads">
+            <path class="road-c" style="--d:0s" pathLength="1" d="M-20 236 L340 92" />
+            <path class="road" style="--d:0s" pathLength="1" d="M-20 236 L340 92" />
+            <path class="road-c" style="--d:.12s" pathLength="1" d="M70 -20 L250 340" />
+            <path class="road" style="--d:.12s" pathLength="1" d="M70 -20 L250 340" />
+            <path class="road-c thin" style="--d:.24s" pathLength="1" d="M-20 120 L180 340" />
+            <path class="road thin" style="--d:.24s" pathLength="1" d="M-20 120 L180 340" />
+            <path class="road-c thin" style="--d:.34s" pathLength="1" d="M140 -20 L340 210" />
+            <path class="road thin" style="--d:.34s" pathLength="1" d="M140 -20 L340 210" />
+          </g>
+          <path class="route" pathLength="1" d="M160 168 L196 154 L218 196 L238 186" />
+        </svg>
+        <div class="ipin ioffice" style="--x:50%;--y:52.5%;--d:.85s"><span class="pin-b">◉ 사옥</span><span class="pin-t"></span></div>
+        <div class="ipin" style="--x:28%;--y:34%;--d:1.15s"><span class="pin-b">🍜</span><span class="pin-t"></span></div>
+        <div class="ipin" style="--x:74%;--y:30%;--d:1.25s"><span class="pin-b">🍣</span><span class="pin-t"></span></div>
+        <div class="ipin" style="--x:22%;--y:70%;--d:1.35s"><span class="pin-b">🍚</span><span class="pin-t"></span></div>
+        <div class="ipin itarget" style="--x:74.5%;--y:58%;--d:1.45s"><span class="pin-b">🥟 <span class="irate">4.6</span></span><span class="pin-t"></span></div>
+        <div class="ipin" style="--x:52%;--y:84%;--d:1.55s"><span class="pin-b">☕</span><span class="pin-t"></span></div>
+        <div class="iwalk">걸어서 4분</div>
+      </div>
+      <h1 class="intro-brand" id="introBrand"></h1>
+      <p class="intro-copy">우리 팀이 직접 가본 사옥 근처 밥집 지도.<br />먹은 곳을 남기고, 같이 갈 사람을 모아요.</p>
+      <button class="btn btn-primary btn-block intro-go" id="introGo">시작하기</button>
+    </div>
+  </section>
+
+  <!-- 로그인 · 멤버 고르기 -->
+  <section id="login" class="login" hidden>
+    <div class="login-inner">
+      <h1 class="brand-big" id="loginBrand"></h1>
+      <p class="login-copy">우리 팀이 직접 가본<br />사옥 근처 밥집 지도.</p>
+      <div id="loginBody"></div>
+    </div>
+  </section>
+
+  <!-- 앱 -->
+  <div id="app" class="app" hidden>
+    <div id="map" class="map"></div>
+
+    <div class="topbar">
+      <div class="top-row">
+        <div class="brand-pill glass brand" id="brand"></div>
+        <button class="roulette-btn" id="rouletteBtn">오늘 뭐 먹지?</button>
+        <button class="meet-btn glass" id="meetBtn">오늘 약속<span class="badge" id="meetBadge" hidden>0</span></button>
+        <button class="me" id="meBtn" aria-label="내 정보"></button>
+      </div>
+      <div class="filters" role="group" aria-label="필터">
+        <button class="chip glass" data-filter="solo" aria-pressed="false">혼밥 OK</button>
+        <button class="chip glass" data-filter="wait" aria-pressed="false">웨이팅 적음</button>
+        <button class="chip glass" data-filter="cheap" aria-pressed="false">1만원 이하</button>
+      </div>
+    </div>
+
+    <div class="alert" id="alert" hidden role="status" aria-live="polite"></div>
+    <div class="addbar" id="addbar" hidden><span>지도를 눌러 가게 위치를 찍으세요</span><button class="link" id="addCancel">취소</button></div>
+
+    <div class="mapctl">
+      <button class="icon-btn" id="zhome" aria-label="사옥으로">◉</button>
+      <button class="icon-btn" id="zin" aria-label="확대">+</button>
+      <button class="icon-btn" id="zout" aria-label="축소">−</button>
+    </div>
+    <button class="fab" id="fab">+ 장소 추가</button>
+    <div class="attrib" id="attrib" hidden></div>
+    <div class="badge-demo glass" id="demoBadge" hidden>미리보기 · 이 브라우저에만 저장</div>
+
+    <aside class="panel glass" id="panel" data-open="false">
+      <button class="grabber" id="grab" aria-label="목록 펼치기"><span></span></button>
+      <div class="seg" id="tabs" role="tablist">
+        <button role="tab" data-tab="top" aria-selected="true">추천</button>
+        <button role="tab" data-tab="list" aria-selected="false">전체</button>
+        <button role="tab" data-tab="mine" aria-selected="false">내 기록</button>
+      </div>
+      <div class="panel-body" id="panelBody"></div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+    <section class="sheet" id="sheet" hidden role="dialog" aria-modal="true"></section>
+    <div class="toast" id="toast" role="status"></div>
+  </div>
+  <!-- 핀에 마우스를 올리면 뜨는 정보 카드 (PC) -->
+  <div class="tip glass" id="tip" hidden role="tooltip"></div>
+
+  <script src="./config.js"></script>
+  <script src="./members.js"></script>
+  <script src="./seeds.js"></script>
+  <script src="./store.js"></script>
+  <script src="./walk.js"></script>
+  <script src="./map-kakao.js"></script>
+  <script src="./map-libre.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

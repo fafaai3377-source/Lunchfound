@@ -1,0 +1,12 @@
+{
+  "name": "lunchfound",
+  "private": true,
+  "description": "사옥 근처 점심 지도 — 정적 사이트 + Vercel 서버 함수",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "bcryptjs": "^2.4.3"
+  }
+}
