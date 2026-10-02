@@ -27,7 +27,7 @@
       const t = await u.getIdTokenResult().catch(() => null);
       const name = t?.claims?.member;
       if (!name) { await A.signOut(auth); return userCb(null, "다시 로그인해 주세요."); }
-      current = { uid: u.uid, name };
+      current = { uid: u.uid, name, admin: t?.claims?.admin === true };
       userCb(current);
     });
     const toArr = (s) => s.docs.map((d) => { const v = d.data(); return { id: d.id, ...v, createdAt: v.createdAt?.toMillis?.() ?? Date.now() }; });
@@ -42,7 +42,7 @@
         await A.signInWithCustomToken(auth, j.token);
       },
       signOut: () => A.signOut(auth),
-      async getProfile() { return current ? { memberName: current.name } : null; },
+      async getProfile() { return current ? { memberName: current.name, admin: current.admin } : null; },
       async setProfile() {},
       subscribe(cb) {
         const st = { places: [], reviews: [], meetups: [] };
@@ -98,13 +98,13 @@
     const emit = () => sub({ places: [...data.places], reviews: [...data.reviews], meetups: data.meetups.map((m) => ({ ...m, joined: { ...m.joined } })) });
     const save = () => { set(KEY, JSON.stringify(data)); emit(); };
     const id = () => Math.random().toString(36).slice(2, 10);
-    const userOf = (n) => ({ uid: "demo-" + n, email: "preview@local", name: n });
+    const userOf = (n) => ({ uid: "demo-" + n, email: "preview@local", name: n, admin: n === "관리자" });
     return {
       demo: true,
       onUser(cb) { userCb = cb; const n = get(NKEY); setTimeout(() => cb(n ? userOf(n) : null), 0); },
       async signIn(memberName) { set(NKEY, memberName); userCb(userOf(memberName)); },
       async signOut() { try { localStorage.removeItem(NKEY); } catch {} },
-      async getProfile(uid) { const n = uid.replace(/^demo-/, ""); return n ? { memberName: n } : null; },
+      async getProfile(uid) { const n = uid.replace(/^demo-/, ""); return n ? { memberName: n, admin: n === "관리자" } : null; },
       async setProfile() {},
       reset() { try { localStorage.removeItem(KEY); localStorage.removeItem(NKEY); } catch {} },
       subscribe(cb) { sub = cb; emit(); },

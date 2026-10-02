@@ -16,6 +16,8 @@
   const avatar = (name, sm) => { const src = photoOf(name);
     return `<span class="avatar${sm ? " sm" : ""}" style="background:${hue(name)}">${esc(String(name).charAt(0))}${src ? `<img src="${src}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : ""}</span>`; };
   const member = (name) => MEMBERS.find((m) => m.name === name);
+  // 관리자(이름 "admin" + 관리자 비밀번호): 누가 등록했든 장소·기록 삭제, 장소 정보 수정, 모든 약속 취소 가능
+  const isAdmin = () => !!state.user?.admin;
 
   const WAIT = { none: "웨이팅 없음", ten: "10분 안팎", twenty: "20분 이상" };
   const WAIT_S = { none: "없음", ten: "10분", twenty: "20분+" };
@@ -349,8 +351,8 @@
         <div class="stars-s">${"★".repeat(r.rating)}<span style="color:var(--fill-2)">${"★".repeat(5 - r.rating)}</span></div>
         <div class="tags">${r.wait ? `<span class="tag">${WAIT[r.wait]}</span>` : ""}${r.solo ? `<span class="tag">${SOLO[r.solo]}</span>` : ""}${r.price ? `<span class="tag">${won(r.price)}</span>` : ""}</div>
         ${r.menu ? `<div class="review-menu">추천 메뉴 <b>${esc(r.menu)}</b></div>` : ""}
-        ${r.uid === me ? `<button class="del" data-del="${esc(r.id)}">내 기록 삭제</button>` : ""}</div></div>`).join("");
-    const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.uid === me ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
+        ${r.uid === me || isAdmin() ? `<button class="del" data-del="${esc(r.id)}">${r.uid === me ? "내 기록 삭제" : "기록 삭제 (관리자)"}</button>` : ""}</div></div>`).join("");
+    const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.uid === me || isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
     const hero = img
       ? `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}<div class="hero-cap"><a href="${esc(img.source)}" target="_blank" rel="noopener">${esc(img.from || "블로그")} 사진 ↗</a>${p.images.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}</div></div>`
       : `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}${state.store.demo ? `<div class="hero-cap"><span style="font-size:12px;font-weight:600;color:#fff;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:999px">실제 버전에서는 블로그 대표 사진이 자동으로 들어가요</span></div>` : `<div class="hero-cap"><button data-act="findimg">블로그 사진 찾기</button></div>`}</div>`;
@@ -373,7 +375,8 @@
       ${wishers}
       <div class="h3">멤버 기록 ${st.count}</div>
       ${reviews || `<p class="empty" style="padding:8px 0">아직 가본 멤버의 기록이 없어요. 다녀왔다면 첫 기록을 남겨주세요.</p>`}
-      ${p.createdBy === me && !others ? `<button class="del" data-act="delplace" style="margin-top:18px">이 장소 삭제</button>` : ""}
+      ${isAdmin() ? `<div class="admin-tools"><span class="admin-tag">관리자</span><button class="link" data-act="editplace">장소 정보 수정</button><button class="link danger" data-act="delplace">장소와 기록 모두 삭제</button></div>`
+        : p.createdBy === me && !others ? `<button class="del" data-act="delplace" style="margin-top:18px">이 장소 삭제</button>` : ""}
     `, "place");
     $$("[data-dir]", s).forEach((b) => (b.onclick = (e) => { e.preventDefault(); openDir(b.dataset.dir, p); }));
     $("[data-act=review]", s).onclick = () => openReviewForm(p.id, "visited");
@@ -382,6 +385,7 @@
     const ni = $("[data-act=nextimg]", s); if (ni) ni.onclick = () => state.store.updatePlace(p.id, { imageIdx: ((p.imageIdx || 0) + 1) % p.images.length });
     const fi = $("[data-act=findimg]", s); if (fi) fi.onclick = async () => { fi.textContent = "찾는 중…"; await loadImages(p); if (!curImage(placeById(p.id))) fi.textContent = "사진을 찾지 못했어요"; };
     $$("[data-del]", s).forEach((b) => (b.onclick = async () => { if (!confirm("이 기록을 삭제할까요?")) return; await state.store.deleteReview(b.dataset.del); toast("삭제했어요"); }));
+    const ep = $("[data-act=editplace]", s); if (ep) ep.onclick = () => openEditPlace(p);
     const dp = $("[data-act=delplace]", s);
     if (dp) dp.onclick = async () => { if (!confirm("이 장소와 내 기록을 삭제할까요?")) return; for (const r of st.rs) await state.store.deleteReview(r.id); await state.store.deletePlace(p.id); closeSheet(); toast("장소를 삭제했어요"); };
   }
@@ -597,6 +601,29 @@
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) setTimeout(done, 50);
   }
 
+  // ───────── 장소 정보 수정 (관리자) ─────────
+  function openEditPlace(p) {
+    const f = { name: p.name, category: p.category || "기타", note: p.note || "" };
+    const render = () => {
+      const s = showSheet(`
+        ${head("장소 정보 수정", "<span>관리자 · 모든 멤버에게 바로 반영돼요</span>")}
+        <div class="field"><label class="flabel" for="epName">가게 이름</label><input class="input" id="epName" maxlength="40" value="${esc(f.name)}" /><p class="err" id="epErr"></p></div>
+        <div class="field"><span class="flabel">종류</span><div class="chips">${CATS.map((c) => `<button class="chip" data-ec="${c}" aria-pressed="${f.category === c}">${catLabel(c)}</button>`).join("")}</div></div>
+        <div class="field"><label class="flabel" for="epNote">한 줄 설명 <span class="opt">선택 · 예: 라멘, 진주냉면</span></label><input class="input" id="epNote" maxlength="30" value="${esc(f.note)}" /></div>
+        <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="epSave">저장</button><button class="btn btn-plain btn-block" id="epBack">취소</button></div>`, "editplace");
+      const n = $("#epName", s); n.oninput = () => (f.name = n.value);
+      const nt = $("#epNote", s); nt.oninput = () => (f.note = nt.value);
+      $$("[data-ec]", s).forEach((b) => (b.onclick = () => { f.category = b.dataset.ec; render(); }));
+      $("#epBack", s).onclick = () => openPlace(p.id);
+      $("#epSave", s).onclick = async () => {
+        if (!f.name.trim()) { $("#epErr", s).textContent = "가게 이름을 적어주세요."; return; }
+        try { await state.store.updatePlace(p.id, { name: f.name.trim().slice(0, 40), category: f.category, note: f.note.trim().slice(0, 30), emoji: "" }); toast("장소 정보를 고쳤어요"); openPlace(p.id); }
+        catch (e) { console.error(e); toast("저장하지 못했어요"); }
+      };
+    };
+    render();
+  }
+
   // ───────── 오늘 약속 (식사조인) ─────────
   // 점심시간은 12:30 시작 ~ 13:30 종료로 고정. 13:30이 지나면 새 약속은 내일 점심으로 올라감
   const LUNCH = C.lunch || { start: "12:30", end: "13:30" };
@@ -641,6 +668,7 @@
       <div class="meet-bottom"><div class="slots">${slots}</div><span class="meet-n${mtFull(m) ? " full" : ""}">${mtFull(m) ? "마감" : `선착순 ${n}/${m.capacity}명`}</span></div>
       <div class="meet-who">${ppl.length ? ppl.map((x) => `${esc(x.name)}님`).join(", ") + " 참여" : "아직 참여한 사람이 없어요"}</div>
       <div class="btns" style="margin-top:12px">${action}<button class="btn btn-plain" data-mt-share="${esc(m.id)}">공유 문구 복사</button></div>
+      ${!host && isAdmin() ? `<button class="link danger" data-mt-del="${esc(m.id)}" style="margin-top:10px">이 약속 취소 (관리자)</button>` : ""}
     </div>`;
   }
 
@@ -881,7 +909,7 @@
 
   // ───────── 내 정보 ─────────
   function openMe() {
-    const m = member(state.user.name) || { team: "", role: "" };
+    const m = isAdmin() ? { team: "ADMIN", role: "관리자 · 장소·기록·약속 편집 권한" } : member(state.user.name) || { team: "", role: "" };
     const s = showSheet(`
       ${head("내 정보")}
       <div class="list-card" style="background:var(--parchment);margin-top:14px"><div class="member">${avatar(state.user.name)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(state.user.name)}님</div><div class="rl">${esc(m.role)}</div></div></div></div>
@@ -910,21 +938,24 @@
     $("#loginBody").innerHTML = google
       ? `<button class="btn btn-primary btn-block" id="gBtn">Google 계정으로 시작하기</button><p class="login-err">${esc(error || "")}</p>`
       : `<h2 class="picker-title">나는 누구예요?</h2><p class="picker-sub">기록에 이 이름이 표시돼요. 한 번만 고르면 돼요.</p>${groups}<p class="login-err">${esc(error || "")}</p>
-         ${state.store.demo ? `<p class="demo-note">미리보기 버전이에요. 실제 버전은 회사 Google 계정으로 로그인하고, 기록이 멤버 모두에게 공유돼요.</p>` : ""}`;
+         <div class="admin-entry"><button class="link" data-member="admin">관리자 로그인</button></div>
+         ${state.store.demo ? `<p class="demo-note">미리보기 버전이에요. 실제 버전은 이름 + 공용 비밀번호로 로그인하고, 기록이 멤버 모두에게 공유돼요.</p>` : ""}`;
     const g = $("#gBtn"); if (g) g.onclick = async () => { try { await state.store.signIn(); } catch (e) { $(".login-err").textContent = "로그인 창이 닫혔거나 팝업이 차단됐어요."; } };
     $$("[data-member]").forEach((b) => (b.onclick = () => window.__pickMember?.(b.dataset.member)));
   }
 
   // 공용 비밀번호 입력 단계 (실제 버전)
   function showPassword(name) {
-    const m = member(name) || { team: "", role: "" };
+    const adm = name === "admin";
+    const m = adm ? { team: "ADMIN", role: "장소·기록·약속을 지우고 고칠 수 있어요" } : member(name) || { team: "", role: "" };
+    const shown = adm ? "관리자" : name;
     $("#loginBody").innerHTML = `
-      <h2 class="picker-title">비밀번호를 입력해 주세요</h2>
-      <p class="picker-sub">파파 공용 비밀번호예요. 한 번 로그인하면 이 기기에서 계속 유지돼요.</p>
-      <div class="list-card"><div class="member">${avatar(name)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(name)}님</div><div class="rl">${esc(m.role)}</div></div><button class="link" id="pwBack" type="button">다른 이름</button></div></div>
+      <h2 class="picker-title">${adm ? "관리자 로그인" : "비밀번호를 입력해 주세요"}</h2>
+      <p class="picker-sub">${adm ? "관리자 비밀번호를 입력해 주세요." : "파파 공용 비밀번호예요. 한 번 로그인하면 이 기기에서 계속 유지돼요."}</p>
+      <div class="list-card"><div class="member">${avatar(shown)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(shown)}${adm ? "" : "님"}</div><div class="rl">${esc(m.role)}</div></div><button class="link" id="pwBack" type="button">다른 이름</button></div></div>
       <form id="pwForm" class="field" autocomplete="on">
         <input type="text" name="username" value="${esc(name)}" autocomplete="username" hidden />
-        <input class="input" id="pw" type="password" autocomplete="current-password" placeholder="공용 비밀번호" aria-label="공용 비밀번호" />
+        <input class="input" id="pw" type="password" autocomplete="current-password" placeholder="${adm ? "관리자 비밀번호" : "공용 비밀번호"}" aria-label="비밀번호" />
         <div class="stack" style="margin-top:12px"><button class="btn btn-primary btn-block" id="pwGo" type="submit">로그인</button></div>
       </form>
       <p class="login-err" id="pwErr" role="alert"></p>`;
@@ -1025,14 +1056,14 @@
       if (!u) {
         const login = () => {
           // 이름 고르기 → (실제 버전) 공용 비밀번호 입력 → 로그인
-          window.__pickMember = (name) => (state.store.needsPassword ? showPassword(name) : state.store.signIn(name));
+          window.__pickMember = (name) => (state.store.needsPassword ? showPassword(name) : state.store.signIn(name === "admin" ? "관리자" : name));
           showLogin({ google: false, error: err });
         };
         if (err) return login();
         return showIntro(login);   // 로그인 전 첫 화면: 모션그래픽 소개
       }
       const prof = await state.store.getProfile(u.uid);
-      if (prof?.memberName && member(prof.memberName)) { started = true; return start({ ...u, name: prof.memberName }); }
+      if (prof?.memberName && (member(prof.memberName) || prof.admin)) { started = true; return start({ ...u, name: prof.memberName, admin: !!prof.admin }); }
       window.__pickMember = async (name) => { await state.store.setProfile(u.uid, name); started = true; start({ ...u, name }); };
       showLogin({ google: false });
     });

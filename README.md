@@ -45,12 +45,19 @@
 - 확인은 서버 함수 `api/login.js`가 하고, 맞으면 Firebase 로그인 토큰을 발급해요. 틀리면 0.6초 지연 후 거절해서 대입 공격을 늦춰요.
 - 비밀번호를 바꾸려면 해시만 새로 만들어 환경변수를 바꾸고 다시 배포하면 돼요.
 
+## 관리자
+
+- 로그인 화면 맨 아래 **관리자 로그인** → 관리자 비밀번호 입력
+- 누가 등록했든 장소·기록 삭제, 장소 정보(이름·종류·한 줄 설명) 수정, 모든 약속 취소 가능
+- 비밀번호는 Vercel 환경변수 `ADMIN_PASSWORD_HASH`(SHA-256 해시)에만 있어요. 바꾸려면 새 해시로 교체 후 다시 배포
+
 ## 4. Vercel 환경변수 (Settings > Environment Variables)
 
 | 이름 | 값 |
 |---|---|
 | `LOGIN_PASSWORD_HASH` | 공용 비밀번호 해시 (SHA-256 64글자 또는 bcrypt) |
 | `FIREBASE_SERVICE_ACCOUNT` | 서비스 계정 JSON (원문 그대로 붙여넣어도 되고 base64도 돼요) |
+| `ADMIN_PASSWORD_HASH` | 관리자 비밀번호 해시 |
 | `KAKAO_REST_KEY` | 카카오 REST API 키 (블로그 대표 사진) |
 
 ## 5. 배포

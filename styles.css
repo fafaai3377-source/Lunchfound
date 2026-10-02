@@ -502,3 +502,10 @@ input { font: inherit; color: inherit; }
 
 /* 지도 라이브러리(MapLibre)가 지도 영역을 position: relative로 바꾸면 높이가 0이 됨 → 우리 배치가 항상 우선 */
 .app .map, .app .map.maplibregl-map { position: absolute !important; inset: 0; }
+
+/* 관리자 */
+.admin-entry { text-align: center; margin-top: 18px; }
+.admin-entry .link { color: var(--ink-3); font-size: 13px; }
+.admin-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; padding: 12px 14px; border-radius: var(--r-md); background: var(--parchment); }
+.admin-tag { font-size: 11px; font-weight: 700; color: #fff; background: var(--ink); padding: 2px 8px; border-radius: 9999px; }
+.link.danger { color: #FF3B30; }

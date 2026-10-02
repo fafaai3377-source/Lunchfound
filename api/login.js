@@ -5,6 +5,7 @@
 // 필요한 Vercel 환경변수 (이미 등록된 이름을 그대로 사용)
 //   LOGIN_PASSWORD_HASH       공용 비밀번호 해시 — SHA-256(16진수 64자 또는 base64) · bcrypt($2a$/$2b$) 모두 인식
 //   FIREBASE_SERVICE_ACCOUNT  Firebase 서비스 계정 키 — JSON 원문 또는 base64 모두 인식
+//   ADMIN_PASSWORD_HASH       관리자 비밀번호 해시 — 형식은 위와 같음 (이름 "admin"으로 로그인)
 //   (예전 이름 LUNCH_PASSWORD_HASH, FIREBASE_SERVICE_ACCOUNT_B64도 계속 읽어요)
 const crypto = require("crypto");
 const admin = require("firebase-admin");
@@ -27,13 +28,13 @@ const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(a, b);
 
 // 저장된 값 형식을 알아보고 비교: true(맞음) / false(틀림) / null(설정 없음)
 // 인식 순서: bcrypt → SHA-256(16진수) → SHA-256(base64/base64url) → 그 외에는 비밀번호 원문으로 보고 비교
-function storedSecret() {
-  let v = String(process.env.LOGIN_PASSWORD_HASH || process.env.LUNCH_PASSWORD_HASH || "").trim();
+function storedSecret(kind) {
+  let v = String(kind === "admin" ? process.env.ADMIN_PASSWORD_HASH || "" : process.env.LOGIN_PASSWORD_HASH || process.env.LUNCH_PASSWORD_HASH || "").trim();
   v = v.replace(/^["'`]+|["'`]+$/g, "").trim();          // 실수로 들어간 따옴표 제거
   return v;
 }
-async function checkPassword(password) {
-  const want = storedSecret();
+async function checkPassword(password, kind) {
+  const want = storedSecret(kind);
   if (!want) return null;
   if (/^\$2[aby]\$\d{2}\$/.test(want)) return bcrypt.compare(password, want);                                   // bcrypt
   const hex = want.replace(/^(sha-?256[:$=]|0x)/i, "").replace(/\s+/g, "").toLowerCase();
@@ -50,17 +51,20 @@ module.exports = async (req, res) => {
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   const name = String(body?.name || "").trim(), password = String(body?.password || "");
-  const member = MEMBERS.find((m) => m.name === name);
+  // 관리자: 이름 "admin" + 관리자 비밀번호 → 모든 장소·기록·약속을 지우고 고칠 수 있는 권한(admin)
+  const isAdmin = name.toLowerCase() === "admin" || name === "관리자";
+  const member = isAdmin ? { name: "관리자", team: "ADMIN" } : MEMBERS.find((m) => m.name === name);
   if (!member) return res.status(400).json({ error: "명단에 없는 이름이에요" });
 
-  const ok = await checkPassword(password);
-  if (ok === null) return res.status(500).json({ error: "서버에 비밀번호 설정(LOGIN_PASSWORD_HASH)이 없거나 형식을 알 수 없어요" });
+  const ok = await checkPassword(password, isAdmin ? "admin" : "member");
+  if (ok === null) return res.status(500).json({ error: isAdmin ? "서버에 관리자 비밀번호 설정(ADMIN_PASSWORD_HASH)이 없어요" : "서버에 비밀번호 설정(LOGIN_PASSWORD_HASH)이 없어요" });
   if (!ok) { await sleep(600); return res.status(401).json({ error: "비밀번호가 달라요" }); }   // 연속 대입을 늦추기 위한 지연
 
   try {
     // 같은 이름은 항상 같은 계정 번호(uid) → 기록·약속이 그 멤버에게 계속 연결돼요
-    const uid = "m_" + sha256("lunchfound:" + name).slice(0, 24);
-    const token = await admin.auth(firebaseApp()).createCustomToken(uid, { member: name, team: member.team });
+    const uid = isAdmin ? "admin" : "m_" + sha256("lunchfound:" + name).slice(0, 24);
+    const claims = isAdmin ? { member: "관리자", team: "ADMIN", admin: true } : { member: name, team: member.team };
+    const token = await admin.auth(firebaseApp()).createCustomToken(uid, claims);
     return res.status(200).json({ token });
   } catch (e) {
     return res.status(500).json({ error: e.message === "NO_SERVICE_ACCOUNT" ? "서버에 Firebase 서비스 계정 설정이 없어요" : "로그인 토큰을 만들지 못했어요" });
