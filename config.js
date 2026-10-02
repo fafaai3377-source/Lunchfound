@@ -24,12 +24,12 @@ window.CONFIG = {
 
   // Firebase 웹 앱 설정값. apiKey가 비어 있으면 미리보기 모드(이 브라우저에만 저장)
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: "",
+    apiKey: "AIzaSyDxZCi8FfVBdDLJuubgDP3FWHU_0UBinlM",
+    authDomain: "lunchfound-f470e.firebaseapp.com",
+    projectId: "lunchfound-f470e",
+    storageBucket: "lunchfound-f470e.firebasestorage.app",
+    messagingSenderId: "769338024285",
+    appId: "1:769338024285:web:cc7bfc2599d3832b8e08b4",
   },
 
   // 대표 이미지 서버 함수 (api/place-image.js). Vercel 환경변수 KAKAO_REST_KEY 필요
