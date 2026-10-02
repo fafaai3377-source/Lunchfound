@@ -56,8 +56,18 @@
       // 상세를 처음 연 멤버를 places.views.{uid}에 한 번만 기록 ("내 추천을 본 사람")
       markView: (id, uid) => F.updateDoc(F.doc(db, "places", id), { [`views.${uid}`]: true }),
       deletePlace: (id) => F.deleteDoc(F.doc(db, "places", id)),
-      addReview: (d) => F.addDoc(F.collection(db, "reviews"), { ...d, createdAt: F.serverTimestamp() }),
+      async addReview(d) { const r = await F.addDoc(F.collection(db, "reviews"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       deleteReview: (id) => F.deleteDoc(F.doc(db, "reviews", id)),
+      // 멤버 사진: 원본 크기 사진은 photos 컬렉션에 따로 두고, 가게를 열 때만 불러옴 (앱이 무거워지지 않게)
+      addPhoto: (d) => F.addDoc(F.collection(db, "photos"), { ...d, createdAt: F.serverTimestamp() }),
+      async listPhotos(placeId) {
+        const snap = await F.getDocs(F.query(F.collection(db, "photos"), F.where("placeId", "==", placeId)));
+        return toArr(snap).sort((a, b) => b.createdAt - a.createdAt);
+      },
+      async deletePhotosOf(field, value) {
+        const snap = await F.getDocs(F.query(F.collection(db, "photos"), F.where(field, "==", value)));
+        await Promise.all(snap.docs.map((d) => F.deleteDoc(d.ref).catch(() => {})));
+      },
       // 오늘 약속 (식사조인)
       async addMeetup(d) { const r = await F.addDoc(F.collection(db, "meetups"), { date: today(), ...d, joined: {}, createdAt: F.serverTimestamp() }); return r.id; },
       // 선착순: 트랜잭션으로 정원 확인과 참여를 한 번에 처리 (동시에 눌러도 정원 초과 없음)
@@ -91,10 +101,11 @@
     const o = C.office;
     const get = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
     const set = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-    const seed = () => ({ places: [], reviews: [], meetups: [] }); // 기본 가게는 app.js가 seeds.js로 채움
+    const seed = () => ({ places: [], reviews: [], meetups: [], photos: [] }); // 기본 가게는 app.js가 seeds.js로 채움
     let data; try { data = JSON.parse(get(KEY)) || seed(); } catch { data = seed(); }
     let sub = () => {}, userCb = () => {};
     data.meetups = (data.meetups || []).filter((m) => m.date >= today()); // 지난 날 약속은 정리
+    data.photos = data.photos || [];
     const emit = () => sub({ places: [...data.places], reviews: [...data.reviews], meetups: data.meetups.map((m) => ({ ...m, joined: { ...m.joined } })) });
     const save = () => { set(KEY, JSON.stringify(data)); emit(); };
     const id = () => Math.random().toString(36).slice(2, 10);
@@ -111,8 +122,11 @@
       async addPlace(d) { const i = id(); data.places.push({ id: i, ...d, createdAt: Date.now() }); save(); return i; },
       async markView(pid, uid) { const p = data.places.find((x) => x.id === pid); if (p) { p.views = { ...(p.views || {}), [uid]: true }; save(); } },
       async updatePlace(pid, patch) { const p = data.places.find((x) => x.id === pid); if (p) Object.assign(p, patch); save(); },
-      async deletePlace(pid) { data.places = data.places.filter((p) => p.id !== pid); data.reviews = data.reviews.filter((r) => r.placeId !== pid); save(); },
-      async addReview(d) { data.reviews.push({ id: id(), ...d, createdAt: Date.now() }); save(); },
+      async deletePlace(pid) { data.places = data.places.filter((p) => p.id !== pid); data.reviews = data.reviews.filter((r) => r.placeId !== pid); data.photos = data.photos.filter((x) => x.placeId !== pid); save(); },
+      async addReview(d) { const i = id(); data.reviews.push({ id: i, ...d, createdAt: Date.now() }); save(); return i; },
+      async addPhoto(d) { data.photos.push({ id: id(), ...d, createdAt: Date.now() }); try { save(); } catch { data.photos.pop(); throw new Error("미리보기 저장 공간이 부족해요"); } },
+      async listPhotos(pid) { return data.photos.filter((x) => x.placeId === pid).sort((a, b) => b.createdAt - a.createdAt); },
+      async deletePhotosOf(field, value) { data.photos = data.photos.filter((x) => x[field] !== value); save(); },
       async deleteReview(rid) { data.reviews = data.reviews.filter((r) => r.id !== rid); save(); },
       async addMeetup(d) { const i = id(); data.meetups.push({ id: i, date: today(), ...d, joined: {}, createdAt: Date.now() }); save(); return i; },
       async joinMeetup(mid, user) {

@@ -59,6 +59,7 @@
     store: null, user: null, places: [], reviews: [], meetups: [], pending: null,
     seenMeet: new Set(), meetInit: false, mf: null,
     filters: { solo: false, wait: false, cheap: false },
+    sort: "popular",   // 전체 목록 정렬: popular(지난주 인기) / rating(별점 높은 순) / near(가까운 순)
     tab: "top", cat: "", sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
     rl: { want: [], avoid: [], skipYesterday: true, includeWish: true, spinning: false },
@@ -91,13 +92,27 @@
       avg: rated.length ? rated.reduce((s, r) => s + r.rating, 0) / rated.length : 0,
       wait: most(visited.map((r) => r.wait)), solo: most(visited.map((r) => r.solo)),
       price: priced.length ? Math.round(priced.reduce((s, r) => s + r.price, 0) / priced.length / 500) * 500 : 0,
+      minPrice: priced.length ? Math.min(...priced.map((r) => r.price)) : 0,
+      week: visited.filter((r) => Date.now() - r.createdAt < 7 * 864e5).length,   // 지난 7일 동안 다녀온 기록 수
       walk: walkMin(p.lat, p.lng),
     };
   }
   const anyFilter = () => Object.values(state.filters).some(Boolean) || (state.tab === "list" && !!state.cat);
+  // 특별 카테고리 — 혼밥: 멤버 기록이 대부분 "혼자 OK" / 거지맵: 멤버가 만원 미만으로 먹은 기록이 있는 곳
+  const SPECIAL = {
+    "@solo": { label: "🍙 혼밥", test: (st) => st.solo === "ok" },
+    "@cheap": { label: "💸 거지맵", test: (st) => st.minPrice > 0 && st.minPrice < (C.cheapPrice || 10000) },
+  };
+  const inCat = (x, cat) => (SPECIAL[cat] ? SPECIAL[cat].test(x.st) : (x.p.category || "기타") === cat);
+  // 정렬: 지난주 인기 → 별점 → 가까운 순으로 동점 처리
+  const SORTS = { popular: "지난주 인기", rating: "별점 높은 순", near: "가까운 순" };
+  const byNear = (x, y) => x.st.walk - y.st.walk;
+  const byRating = (x, y) => y.st.avg - x.st.avg || y.st.count - x.st.count || byNear(x, y);
+  const byPopular = (x, y) => y.st.week - x.st.week || y.st.count - x.st.count || byRating(x, y);
+  const sorter = (k) => (k === "rating" ? byRating : k === "near" ? byNear : byPopular);
   function passes(st, p) {
     const f = state.filters;
-    if (p && state.tab === "list" && state.cat && (p.category || "기타") !== state.cat) return false;
+    if (p && state.tab === "list" && state.cat && !inCat({ p, st }, state.cat)) return false;
     if (f.solo && st.solo !== "ok") return false;
     if (f.wait && st.wait !== "none") return false;
     if (f.cheap && !(st.price > 0 && st.price <= C.cheapPrice)) return false;
@@ -137,9 +152,35 @@
     kakao: dirLinks(p).kakao.web,
   });
   const curImage = (p) => (p.images && p.images.length ? p.images[(p.imageIdx || 0) % p.images.length] : null);
+  // 대표 이미지 우선순위: 멤버가 기록에 올린 메뉴 사진(가장 최근) → 블로그 사진 → 카테고리 아이콘
+  const memberThumb = (p) => state.reviews.filter((r) => r.placeId === p.id && r.thumb).sort((a, b) => b.createdAt - a.createdAt)[0]?.thumb || "";
   function thumbHTML(p, cls = "thumb") {
-    const img = curImage(p);
-    return `<div class="${cls}"><div class="ph">${emojiFor(p)}</div>${img ? `<img src="${esc(img.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" style="position:relative">` : ""}</div>`;
+    const mt = memberThumb(p), img = curImage(p), src = mt || img?.image || "";
+    return `<div class="${cls}"><div class="ph">${emojiFor(p)}</div>${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" style="position:relative">` : ""}</div>`;
+  }
+
+  // ───────── 사진: 고르자마자 휴대폰에서 줄여서 올림 (원본은 최대 1200px, 목록용 썸네일은 200px) ─────────
+  async function shrinkImage(file, max, quality) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("IMG")); i.src = url; });
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL("image/jpeg", quality);
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function preparePhoto(file) {
+    let full = await shrinkImage(file, 1200, 0.72);
+    if (full.length > 850000) full = await shrinkImage(file, 900, 0.6);   // 데이터베이스 한 칸 크기 제한(1MB) 안으로
+    const thumb = await shrinkImage(file, 200, 0.6);
+    return { full, thumb };
+  }
+  function openLightbox(src) {
+    const d = document.createElement("div");
+    d.className = "lightbox"; d.innerHTML = `<img src="${esc(src)}" alt="멤버 사진" /><button aria-label="닫기">✕</button>`;
+    d.onclick = () => d.remove(); document.body.appendChild(d);
   }
 
   // ───────── 대표 이미지 (블로그) ─────────
@@ -171,6 +212,19 @@
     el.className = "office";
     el.innerHTML = `<div class="pin-b">◉ ${esc(C.office.name)}</div><div class="pin-t"></div>`;
     MapKit.add(el, C.office.lat, C.office.lng, "bottom");
+    // 핀 누르기 → 가게 정보 열기. 마우스로 누르면 지도 라이브러리가 "끌기"로 먼저 잡아채서 click이 핀에 안 오므로,
+    // 누른 곳과 뗀 곳의 핀을 직접 찾아 같은 핀이고 거의 안 움직였으면 연다.
+    let down = null;
+    const pinAt = (x, y) => document.elementFromPoint(x, y)?.closest?.(".pin");
+    const mapEl = $("#map");
+    mapEl.addEventListener("pointerdown", (e) => { const pin = pinAt(e.clientX, e.clientY); down = pin ? { id: pin.dataset.pid, x: e.clientX, y: e.clientY } : null; }, true);
+    mapEl.addEventListener("pointerup", (e) => {
+      if (!down) return;
+      const d = down; down = null;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8 || state.adding) return;
+      const pin = pinAt(e.clientX, e.clientY);
+      if (pin && pin.dataset.pid === d.id) { hideTip(); openPlace(d.id); }
+    }, true);
     renderMarkers();
   }
 
@@ -187,7 +241,7 @@
       const label = fresh ? (st.wish.length ? ` <span class="pin-n">♡${st.wish.length}</span>` : "") : ` <span class="pin-r">${st.avg.toFixed(1)}</span>`;
       el.innerHTML = `<div class="pin-b"><span class="pin-e">${emojiFor(p)}</span>${label}</div><div class="pin-t"></div><div class="pin-l">${esc(p.name)}</div>`;
       if (!popped.has(p.id)) { popped.add(p.id); el.classList.add("pop"); el.style.setProperty("--d", `${Math.min(order++ * 35, 700)}ms`); }
-      el.addEventListener("click", (e) => { e.stopPropagation(); hideTip(); if (!state.adding) openPlace(p.id); });
+      el.dataset.pid = p.id;   // 클릭은 initMap의 pinTap에서 처리 (PC 마우스에서도 확실히 열리게)
       el.addEventListener("mouseenter", () => showTip(p, el));
       el.addEventListener("mouseleave", hideTip);
       const m = MapKit.add(el, p.lat, p.lng, "bottom");
@@ -247,8 +301,9 @@
     meta.push(st.count ? `<span class="rate"><i>★</i> ${st.avg.toFixed(1)} <span style="color:var(--ink-2);font-weight:400">(${st.count})</span></span>` : st.wish.length ? `<span>♡ 가고 싶은 멤버 ${st.wish.length}</span>` : `<span>아직 기록 없음</span>`);
     meta.push(`<span>${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}</span>`);
     if (st.wait) meta.push(`<span>웨이팅 ${WAIT_S[st.wait]}</span>`);
+    if (st.week) meta.push(`<span>지난주 ${st.week}번</span>`);
     if (st.solo === "ok") meta.push(`<span>혼밥 OK</span>`);
-    if (st.price) meta.push(`<span>${won(st.price)}</span>`);
+    if (st.minPrice) meta.push(`<span>${st.minPrice < (C.cheapPrice || 10000) ? "💸 " : ""}${won(st.minPrice)}부터</span>`);
     return `<button class="row" data-place="${esc(p.id)}">${rank ? `<span class="rank">${rank}</span>` : ""}${thumbHTML(p)}
       <div class="row-main"><div class="row-name">${esc(p.name)}</div><div class="row-meta">${meta.join("")}</div></div>
       <span class="row-walk">도보 ${st.walk}분</span></button>`;
@@ -261,22 +316,31 @@
       html = `<div class="section-h">오늘의 추천</div><div class="section-sub">멤버 별점이 높은 순${anyFilter() ? " · 필터 적용" : ""}</div>` +
         (top.length ? top.map((x, i) => rowHTML(x, i + 1)).join("") : `<p class="empty">${anyFilter() ? "조건에 맞는 곳이 없어요. 필터를 하나 꺼보세요." : "아직 별점이 남은 곳이 없어요. 오늘 먹은 곳부터 남겨보세요."}</p>`);
     } else if (state.tab === "list") {
-      // 카테고리 칩(개수 포함) + 고른 카테고리만 / 전체일 때는 카테고리별로 묶어서
+      // 정렬(지난주 인기 / 별점 / 가까운 순) + 카테고리 칩(혼밥·거지맵 포함) / 전체일 때는 카테고리별로 묶어서
       const base = all.filter((x) => passes(x.st));
-      const count = (c) => base.filter((x) => (x.p.category || "기타") === c).length;
+      const count = (c) => base.filter((x) => inCat(x, c)).length;
       const cats = CATS.filter((c) => count(c));
-      const chips = `<div class="catbar"><button class="chip" data-cat="" aria-pressed="${!state.cat}">전체<span class="n">${base.length}</span></button>${cats.map((c) => `<button class="chip" data-cat="${c}" aria-pressed="${state.cat === c}">${catLabel(c)}<span class="n">${count(c)}</span></button>`).join("")}</div>`;
-      const near = (x, y) => x.st.walk - y.st.walk;
+      const specials = Object.keys(SPECIAL);
+      const sortFn = sorter(state.sort);
+      const sortBar = `<div class="seg sortbar" role="group" aria-label="정렬">${Object.entries(SORTS).map(([k, v]) => `<button data-sort="${k}" aria-pressed="${state.sort === k}">${v}</button>`).join("")}</div>`;
+      const chips = `<div class="catbar"><button class="chip" data-cat="" aria-pressed="${!state.cat}">전체<span class="n">${base.length}</span></button>${specials.map((c) => `<button class="chip special" data-cat="${c}" aria-pressed="${state.cat === c}">${SPECIAL[c].label}<span class="n">${count(c)}</span></button>`).join("")}${cats.map((c) => `<button class="chip" data-cat="${c}" aria-pressed="${state.cat === c}">${catLabel(c)}<span class="n">${count(c)}</span></button>`).join("")}</div>`;
       let body2;
       if (state.cat) {
-        const list = base.filter((x) => (x.p.category || "기타") === state.cat).sort(near);
-        body2 = list.length ? list.map((x) => rowHTML(x)).join("") : `<p class="empty">이 카테고리에 등록된 곳이 없어요.</p>`;
+        const list = base.filter((x) => inCat(x, state.cat)).sort(sortFn);
+        const emptyMsg = state.cat === "@solo" ? "아직 혼밥 기록이 없어요. 기록할 때 '혼자 OK'를 골라주세요."
+          : state.cat === "@cheap" ? "아직 만원 미만 기록이 없어요. 기록할 때 가격을 적어주세요." : "이 카테고리에 등록된 곳이 없어요.";
+        body2 = list.length ? list.map((x) => rowHTML(x)).join("") : `<p class="empty">${emptyMsg}</p>`;
+      } else if (state.sort !== "near") {
+        // 인기·별점 순은 카테고리 구분 없이 한 줄로 (순위가 잘 보이게)
+        const list = [...base].sort(sortFn);
+        body2 = list.length ? list.map((x, i) => rowHTML(x, (state.sort === "popular" ? x.st.week : x.st.count) ? i + 1 : 0)).join("") : `<p class="empty">아직 등록된 곳이 없어요.</p>`;
       } else {
-        body2 = cats.length ? cats.map((c) => { const list = base.filter((x) => (x.p.category || "기타") === c).sort(near);
+        body2 = cats.length ? cats.map((c) => { const list = base.filter((x) => inCat(x, c)).sort(sortFn);
           return `<div class="group-h">${catLabel(c)}<span class="n">${list.length}곳</span></div>` + list.map((x) => rowHTML(x)).join(""); }).join("")
-          : `<p class="empty">${anyFilter() ? "조건에 맞는 곳이 없어요." : "아직 등록된 곳이 없어요. + 장소 추가로 첫 가게를 등록해 주세요."}</p>`;
+          : `<p class="empty">아직 등록된 곳이 없어요. + 장소 추가로 첫 가게를 등록해 주세요.</p>`;
       }
-      html = `<div class="section-h">전체 ${base.length}곳</div><div class="section-sub">카테고리별 · 사옥에서 가까운 순</div>${chips}${body2}`;
+      const sub = state.sort === "popular" ? "지난 7일 동안 멤버가 많이 다녀온 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
+      html = `<div class="section-h">전체 ${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${chips}${body2}`;
     } else {
       const mine = state.reviews.filter((r) => r.uid === state.user.uid).sort((a, b) => b.createdAt - a.createdAt);
       const im = myImpact();
@@ -290,6 +354,7 @@
     body.innerHTML = html;
     $$("[data-place]", body).forEach((b) => (b.onclick = () => openPlace(b.dataset.place)));
     $$(".catbar [data-cat]", body).forEach((b) => (b.onclick = () => { state.cat = b.dataset.cat; renderPanel(); renderMarkers(); }));
+    $$("[data-sort]", body).forEach((b) => (b.onclick = () => { state.sort = b.dataset.sort; renderPanel(); }));
   }
   function stagger() {
     const body = $("#panelBody");
@@ -351,6 +416,7 @@
         <div class="stars-s">${"★".repeat(r.rating)}<span style="color:var(--fill-2)">${"★".repeat(5 - r.rating)}</span></div>
         <div class="tags">${r.wait ? `<span class="tag">${WAIT[r.wait]}</span>` : ""}${r.solo ? `<span class="tag">${SOLO[r.solo]}</span>` : ""}${r.price ? `<span class="tag">${won(r.price)}</span>` : ""}</div>
         ${r.menu ? `<div class="review-menu">추천 메뉴 <b>${esc(r.menu)}</b></div>` : ""}
+        ${r.thumb ? `<button class="review-ph" data-rph="${esc(r.id)}" aria-label="사진 크게 보기"><img src="${r.thumb}" alt="" />${r.photoCount > 1 ? `<span>+${r.photoCount - 1}</span>` : ""}</button>` : ""}
         ${r.uid === me || isAdmin() ? `<button class="del" data-del="${esc(r.id)}">${r.uid === me ? "내 기록 삭제" : "기록 삭제 (관리자)"}</button>` : ""}</div></div>`).join("");
     const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.uid === me || isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
     const hero = img
@@ -373,6 +439,7 @@
         <p class="dir-note">출발 ${esc(C.office.mapName || C.office.name)} · 도보 경로로 열려요</p>
       </div>
       ${wishers}
+      <div class="gallery" id="gallery" hidden></div>
       <div class="h3">멤버 기록 ${st.count}</div>
       ${reviews || `<p class="empty" style="padding:8px 0">아직 가본 멤버의 기록이 없어요. 다녀왔다면 첫 기록을 남겨주세요.</p>`}
       ${isAdmin() ? `<div class="admin-tools"><span class="admin-tag">관리자</span><button class="link" data-act="editplace">장소 정보 수정</button><button class="link danger" data-act="delplace">장소와 기록 모두 삭제</button></div>`
@@ -384,10 +451,25 @@
     $("[data-act=meet]", s).onclick = () => openMeetForm(p.id);
     const ni = $("[data-act=nextimg]", s); if (ni) ni.onclick = () => state.store.updatePlace(p.id, { imageIdx: ((p.imageIdx || 0) + 1) % p.images.length });
     const fi = $("[data-act=findimg]", s); if (fi) fi.onclick = async () => { fi.textContent = "찾는 중…"; await loadImages(p); if (!curImage(placeById(p.id))) fi.textContent = "사진을 찾지 못했어요"; };
-    $$("[data-del]", s).forEach((b) => (b.onclick = async () => { if (!confirm("이 기록을 삭제할까요?")) return; await state.store.deleteReview(b.dataset.del); toast("삭제했어요"); }));
+    $$("[data-del]", s).forEach((b) => (b.onclick = async () => { if (!confirm("이 기록을 삭제할까요?")) return; await state.store.deleteReview(b.dataset.del); state.store.deletePhotosOf?.("reviewId", b.dataset.del); toast("삭제했어요"); }));
+    // 멤버 사진: 가게를 열 때만 원본을 불러와서 사진 모음 + 상단 대표 사진으로
+    if (st.visited.some((r) => r.photoCount) && state.store.listPhotos) {
+      state.store.listPhotos(p.id).then((list) => {
+        const g = $("#gallery", s); if (!g || !list.length || state.selected !== p.id) return;
+        g.innerHTML = `<div class="h3" style="margin-top:0">멤버 사진 ${list.length}</div><div class="gallery-row">${list.map((ph, i) => `<button class="gal" data-gal="${i}"><img src="${ph.data}" alt="" loading="lazy" />${ph.menu ? `<span>${esc(ph.menu)}</span>` : ""}</button>`).join("")}</div>`;
+        g.hidden = false;
+        $$("[data-gal]", g).forEach((b) => (b.onclick = () => openLightbox(list[+b.dataset.gal].data)));
+        $$("[data-rph]", s).forEach((b) => (b.onclick = () => { const ph = list.find((x) => x.reviewId === b.dataset.rph); if (ph) openLightbox(ph.data); }));
+        const hi = $(".hero img", s), hero = $(".hero", s);
+        if (hero) {
+          if (hi) hi.src = list[0].data; else hero.insertAdjacentHTML("afterbegin", `<img src="${list[0].data}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />`);
+          const cap = $(".hero-cap", hero); if (cap) cap.innerHTML = `<span class="hero-who">📷 ${esc(list[0].userName || "멤버")}님 사진${list[0].menu ? ` · ${esc(list[0].menu)}` : ""}</span>`;
+        }
+      }).catch(() => {});
+    }
     const ep = $("[data-act=editplace]", s); if (ep) ep.onclick = () => openEditPlace(p);
     const dp = $("[data-act=delplace]", s);
-    if (dp) dp.onclick = async () => { if (!confirm("이 장소와 내 기록을 삭제할까요?")) return; for (const r of st.rs) await state.store.deleteReview(r.id); await state.store.deletePlace(p.id); closeSheet(); toast("장소를 삭제했어요"); };
+    if (dp) dp.onclick = async () => { if (!confirm("이 장소와 내 기록을 삭제할까요?")) return; for (const r of st.rs) await state.store.deleteReview(r.id); await state.store.deletePhotosOf?.("placeId", p.id); await state.store.deletePlace(p.id); closeSheet(); toast("장소를 삭제했어요"); };
   }
 
   // ───────── 장소 추가: 검색 ─────────
@@ -474,7 +556,7 @@
   function openReviewForm(placeId, status) {
     const p = placeById(placeId); if (!p) return;
     state.selected = placeId;
-    state.form = { status, rating: 0, wait: "", solo: "", menu: "", price: "" };
+    state.form = { status, rating: 0, wait: "", solo: "", menu: "", price: "", photos: [], busy: false };
     const render = () => {
       const f = state.form, v = f.status === "visited";
       const chips = (k, m) => Object.entries(m).map(([key, label]) => `<button class="chip" data-${k}="${key}" aria-pressed="${f[k] === key}">${label}</button>`).join("");
@@ -486,7 +568,11 @@
           <div class="field"><span class="flabel">점심시간 웨이팅</span><div class="chips">${chips("wait", WAIT)}</div></div>
           <div class="field"><span class="flabel">혼밥</span><div class="chips">${chips("solo", SOLO)}</div></div>
           <div class="field"><label class="flabel" for="rmenu">추천 메뉴</label><input class="input" id="rmenu" maxlength="40" placeholder="제육 정식" value="${esc(f.menu)}" /></div>
-          <div class="field"><label class="flabel" for="rprice">내가 낸 가격</label><input class="input" id="rprice" inputmode="numeric" maxlength="7" placeholder="9000" value="${esc(f.price)}" /></div>`
+          <div class="field"><label class="flabel" for="rprice">내가 낸 가격 <span class="opt">만원 미만이면 💸 거지맵에 들어가요</span></label><input class="input" id="rprice" inputmode="numeric" maxlength="7" placeholder="9000" value="${esc(f.price)}" /></div>
+          <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 첫 장이 목록 대표 사진이 돼요</span></span>
+            <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
+              ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
+            <p class="err" id="phErr"></p></div>`
         : `<div class="field"><label class="flabel" for="rmenu">먹어보고 싶은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="더블 치즈버거" value="${esc(f.menu)}" /></div>`}
         <div class="stack" style="margin-top:26px"><button class="btn btn-primary btn-block" id="rsave">기록 저장</button></div>
       `, "review");
@@ -496,6 +582,18 @@
       $$("[data-solo]", s).forEach((b) => (b.onclick = () => { f.solo = f.solo === b.dataset.solo ? "" : b.dataset.solo; render(); }));
       const m = $("#rmenu", s); if (m) m.oninput = () => (f.menu = m.value);
       const pr = $("#rprice", s); if (pr) pr.oninput = () => { pr.value = pr.value.replace(/\D/g, ""); f.price = pr.value; };
+      $$("[data-ph-del]", s).forEach((b) => (b.onclick = () => { f.photos.splice(+b.dataset.phDel, 1); render(); }));
+      const pi = $("#rphoto", s);
+      if (pi) pi.onchange = async () => {
+        const files = [...pi.files].filter((x) => x.type.startsWith("image/")).slice(0, 3 - f.photos.length);
+        if (!files.length) return;
+        f.busy = true; render();
+        for (const file of files) {
+          try { f.photos.push(await preparePhoto(file)); }
+          catch { f.busy = false; render(); $("#phErr").textContent = "이 사진은 읽지 못했어요. JPG나 PNG로 다시 골라주세요."; return; }
+        }
+        f.busy = false; render();
+      };
       $("#rsave", s).onclick = saveReview;
       $$("[data-close]", s).forEach((b) => (b.onclick = () => openPlace(placeId)));
     };
@@ -504,10 +602,16 @@
   async function saveReview() {
     const f = state.form, v = f.status === "visited";
     if (v && !f.rating) { $("#rerr").textContent = "별점을 골라주세요."; return; }
-    $("#rsave").disabled = true;
+    if (f.busy) { $("#phErr").textContent = "사진을 준비하고 있어요. 잠시만요."; return; }
+    const btn = $("#rsave"); btn.disabled = true;
+    const photos = v ? f.photos : [];
     try {
-      await state.store.addReview({ placeId: state.selected, uid: state.user.uid, userName: state.user.name, status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu: f.menu.trim().slice(0, 40), price: v ? Number(f.price) || 0 : 0 });
-      toast(v ? "기록을 남겼어요" : "가고 싶은 곳에 담았어요");
+      const rid = await state.store.addReview({ placeId: state.selected, uid: state.user.uid, userName: state.user.name, status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu: f.menu.trim().slice(0, 40), price: v ? Number(f.price) || 0 : 0, thumb: photos[0]?.thumb || "", photoCount: photos.length });
+      for (let i = 0; i < photos.length; i++) {
+        btn.textContent = `사진 올리는 중 ${i + 1}/${photos.length}`;
+        await state.store.addPhoto({ placeId: state.selected, reviewId: rid, uid: state.user.uid, userName: state.user.name, menu: f.menu.trim().slice(0, 40), data: photos[i].full });
+      }
+      toast(v ? (photos.length ? `사진 ${photos.length}장과 함께 기록을 남겼어요` : "기록을 남겼어요") : "가고 싶은 곳에 담았어요");
       const id = state.selected; state.form = null; openPlace(id);
     } catch (e) { console.error(e); $("#rsave").disabled = false; toast("저장하지 못했어요"); }
   }
@@ -718,16 +822,19 @@
   }
 
   function openMeetForm(placeId) {
-    state.mf = { placeId, cap: 3, note: "", q: "" };
+    state.mf = { placeId, cap: 3, note: "", q: "", sort: "popular" };
     const render = () => {
       const f = state.mf, p = f.placeId ? placeById(f.placeId) : null;
-      const near = state.places.map((x) => ({ p: x, w: walkMin(x.lat, x.lng) }))
-        .filter((x) => !f.q || x.p.name.replace(/\s/g, "").includes(f.q.replace(/\s/g, ""))).sort((x, y) => x.w - y.w).slice(0, 6);
+      const near = state.places.map((x) => ({ p: x, st: stats(x), w: walkMin(x.lat, x.lng) }))
+        .filter((x) => !f.q || x.p.name.replace(/\s/g, "").includes(f.q.replace(/\s/g, ""))).sort(sorter(f.sort)).slice(0, 8);
+      const why = (x) => f.sort === "popular" && x.st.week ? `지난주 ${x.st.week}번 · ` : f.sort !== "near" && x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : "";
       const s = showSheet(`
         ${head("약속 만들기", `<span>${targetDate() !== TODAY() ? `오늘 점심시간이 아니라서 ${nextWord()} 점심 약속으로 올라가요` : "오늘 ○○ 먹으실 분! 을 올려요"}</span>`)}
         <div class="field"><span class="flabel">어디서</span>
           ${p ? `<div class="pick">${thumbHTML(p)}<div style="flex:1;min-width:0"><div class="nm">${esc(p.name)}</div><div class="ad">${esc(p.category || "기타")} · 사옥에서 도보 ${walkMin(p.lat, p.lng)}분</div></div><button class="link" id="mfChange">바꾸기</button></div>`
-          : `<input class="input" id="mfQ" placeholder="등록된 가게 이름 검색" value="${esc(f.q)}" autocomplete="off" /><div class="results">${near.map((x) => `<button class="result" data-mf-p="${esc(x.p.id)}"><div style="flex:1;min-width:0"><div class="nm">${emojiFor(x.p)} ${esc(x.p.name)}</div></div><span class="ds">도보 ${x.w}분</span></button>`).join("") || `<p class="empty">등록된 가게가 없어요. 먼저 + 장소 추가로 등록해 주세요.</p>`}</div>`}
+          : `<input class="input" id="mfQ" placeholder="등록된 가게 이름 검색" value="${esc(f.q)}" autocomplete="off" />
+             <div class="seg sortbar" role="group" aria-label="정렬">${Object.entries(SORTS).map(([k, v]) => `<button data-mf-sort="${k}" aria-pressed="${f.sort === k}">${v}</button>`).join("")}</div>
+             <div class="results">${near.map((x) => `<button class="result" data-mf-p="${esc(x.p.id)}">${thumbHTML(x.p, "thumb sm")}<div style="flex:1;min-width:0"><div class="nm">${esc(x.p.name)}</div><div class="ad">${esc(x.p.category || "기타")}${x.st.minPrice ? ` · ${won(x.st.minPrice)}부터` : ""}</div></div><span class="ds">${why(x)}도보 ${x.w}분</span></button>`).join("") || `<p class="empty">등록된 가게가 없어요. 먼저 + 장소 추가로 등록해 주세요.</p>`}</div>`}
           <p class="err" id="mfErr"></p></div>
         <div class="field"><span class="flabel">언제</span><div class="fixed-time"><b>${nextWord()} ${LUNCH.start}</b><span>점심시간 ${LUNCH.start}~${LUNCH.end} 고정</span></div></div>
         <div class="field"><span class="flabel">선착순 모집 인원 <span class="opt">나 빼고</span></span><div class="chips">${[1, 2, 3, 4, 5].map((n) => `<button class="chip" data-mf-c="${n}" aria-pressed="${f.cap === n}">${n}명</button>`).join("")}</div></div>
@@ -737,6 +844,7 @@
       `, "meetform");
       const q = $("#mfQ", s); if (q) { q.oninput = () => { f.q = q.value; const pos = q.selectionStart; render(); const n2 = $("#mfQ"); n2.focus(); n2.setSelectionRange(pos, pos); }; }
       $$("[data-mf-p]", s).forEach((b) => (b.onclick = () => { f.placeId = b.dataset.mfP; render(); }));
+      $$("[data-mf-sort]", s).forEach((b) => (b.onclick = () => { f.sort = b.dataset.mfSort; render(); }));
       const ch = $("#mfChange", s); if (ch) ch.onclick = () => { f.placeId = null; render(); };
       $$("[data-mf-c]", s).forEach((b) => (b.onclick = () => { f.cap = +b.dataset.mfC; render(); }));
       const nt = $("#mfNote", s); nt.oninput = () => (f.note = nt.value);
@@ -982,7 +1090,6 @@
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1900); }
 
   function bindUI() {
-    $$(".filters .chip").forEach((b) => (b.onclick = () => { const k = b.dataset.filter; state.filters[k] = !state.filters[k]; b.setAttribute("aria-pressed", state.filters[k]); renderMarkers(); renderPanel(); }));
     $$("#tabs button").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); $("#panel").dataset.open = "true"; renderPanel(); stagger(); renderMarkers(); }));
     $("#grab").onclick = () => { const p = $("#panel"); p.dataset.open = p.dataset.open === "true" ? "false" : "true"; };
     $("#fab").onclick = openAdd;

@@ -519,3 +519,34 @@ input { font: inherit; color: inherit; }
 .login-form { margin-top: 4px; }
 .login-form .flabel { margin-left: 2px; }
 .login-help { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin-top: 18px; }
+
+/* 정렬 · 특별 카테고리 */
+.sortbar { margin: 12px 0 10px; }
+.sortbar button { font-size: 13px; }
+.catbar .chip.special { font-weight: 600; }
+.result .thumb.sm { width: 40px; height: 40px; border-radius: 10px; flex: none; position: relative; overflow: hidden; margin-right: 10px; }
+.result .thumb.sm .ph { font-size: 20px; }
+.result .ad { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+/* 사진 첨부 */
+.photo-pick { display: flex; gap: 10px; flex-wrap: wrap; }
+.ph-item, .ph-add { width: 84px; height: 84px; border-radius: 14px; position: relative; overflow: hidden; flex: none; }
+.ph-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph-item button { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; }
+.ph-add { display: grid; place-content: center; text-align: center; gap: 2px; background: var(--fill); color: var(--ink-2); cursor: pointer; border: 1.5px dashed var(--fill-2); }
+.ph-add span { font-size: 24px; line-height: 1; }
+.ph-add small { font-size: 11px; }
+.ph-add[aria-busy="true"] { opacity: .6; pointer-events: none; }
+/* 멤버 사진 모음 */
+.gallery { margin-top: 22px; }
+.gallery-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x mandatory; }
+.gal { position: relative; flex: none; width: 140px; height: 140px; border-radius: 14px; overflow: hidden; scroll-snap-align: start; }
+.gal img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gal span { position: absolute; left: 6px; bottom: 6px; right: 6px; font-size: 11px; font-weight: 600; color: #fff; background: rgba(0,0,0,.5); padding: 3px 7px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.review-ph { position: relative; display: inline-block; margin-top: 8px; width: 72px; height: 72px; border-radius: 12px; overflow: hidden; }
+.review-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.review-ph span { position: absolute; right: 4px; bottom: 4px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,.55); padding: 1px 6px; border-radius: 8px; }
+.lightbox { position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,.88); display: grid; place-items: center; padding: 24px; animation: fadeIn 160ms ease-out; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 12px; object-fit: contain; }
+.lightbox button { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: 14px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 16px; }
+@keyframes fadeIn { from { opacity: 0; } }
+.hero-who { font-size: 12px; font-weight: 600; color: #fff; background: rgba(0,0,0,.45); padding: 4px 10px; border-radius: 999px; }
