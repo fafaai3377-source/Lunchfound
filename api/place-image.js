@@ -6,7 +6,8 @@ module.exports = async (req, res) => {
   const q = String(req.query.q || "").trim().slice(0, 60);
   if (!q) return res.status(400).json({ error: "q 파라미터가 필요해요" });
   const key = process.env.KAKAO_REST_KEY;
-  if (!key) return res.status(500).json({ error: "KAKAO_REST_KEY 환경변수가 없어요" });
+  // 카카오 키가 아직 없으면 오류 대신 "사진 없음"으로 조용히 응답 (앱은 이모지 썸네일로 보여줌)
+  if (!key) return res.status(200).json({ results: [], disabled: "KAKAO_REST_KEY 환경변수를 넣으면 블로그 사진이 자동으로 붙어요" });
 
   const headers = { Authorization: `KakaoAK ${key}` };
   const strip = (s) => String(s || "").replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").trim();
