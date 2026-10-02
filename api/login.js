@@ -25,15 +25,23 @@ const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").dige
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(a, b);
 
-// 저장된 해시 형식을 알아보고 비교: true(맞음) / false(틀림) / null(설정 없음·형식 모름)
+// 저장된 값 형식을 알아보고 비교: true(맞음) / false(틀림) / null(설정 없음)
+// 인식 순서: bcrypt → SHA-256(16진수) → SHA-256(base64/base64url) → 그 외에는 비밀번호 원문으로 보고 비교
+function storedSecret() {
+  let v = String(process.env.LOGIN_PASSWORD_HASH || process.env.LUNCH_PASSWORD_HASH || "").trim();
+  v = v.replace(/^["'`]+|["'`]+$/g, "").trim();          // 실수로 들어간 따옴표 제거
+  return v;
+}
 async function checkPassword(password) {
-  const want = String(process.env.LOGIN_PASSWORD_HASH || process.env.LUNCH_PASSWORD_HASH || "").trim();
+  const want = storedSecret();
   if (!want) return null;
-  if (/^\$2[aby]\$\d{2}\$/.test(want)) return bcrypt.compare(password, want);                       // bcrypt
-  const hex = want.replace(/^sha256[:$]/i, "").toLowerCase();
-  if (/^[0-9a-f]{64}$/.test(hex)) return same(Buffer.from(sha256(password), "hex"), Buffer.from(hex, "hex"));   // SHA-256 16진수
-  if (/^[A-Za-z0-9+/]{43}=$/.test(want)) return same(crypto.createHash("sha256").update(password, "utf8").digest(), Buffer.from(want, "base64")); // SHA-256 base64
-  return null;
+  if (/^\$2[aby]\$\d{2}\$/.test(want)) return bcrypt.compare(password, want);                                   // bcrypt
+  const hex = want.replace(/^(sha-?256[:$=]|0x)/i, "").replace(/\s+/g, "").toLowerCase();
+  if (/^[0-9a-f]{64}$/.test(hex)) return same(Buffer.from(sha256(password), "hex"), Buffer.from(hex, "hex"));       // SHA-256 16진수
+  const b64 = want.replace(/-/g, "+").replace(/_/g, "/");
+  if (/^[A-Za-z0-9+/]{43}=?$/.test(b64)) return same(crypto.createHash("sha256").update(password, "utf8").digest(), Buffer.from(b64.padEnd(44, "="), "base64")); // SHA-256 base64(url)
+  // 해시가 아닌 값(비밀번호 원문)으로 보이는 경우: 길이를 맞춘 해시끼리 비교해서 타이밍 차이 없이 확인
+  return same(Buffer.from(sha256(password), "hex"), Buffer.from(sha256(want), "hex"));
 }
 
 module.exports = async (req, res) => {
