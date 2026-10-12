@@ -755,3 +755,14 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 /* 모바일 새 장소 입력창: 찍은 위치가 보이도록 화면의 60%까지만, 나머지는 스크롤 */
 @media (max-width: 899px) { .sheet[data-kind="pin"] { max-height: 60vh; overflow-y: auto; } }
 .addr-ok { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint, rgba(0,122,255,.1)); color: var(--accent); font-size: 13px; font-weight: 600; }
+
+/* 모바일 목록: 내림(손잡이 + 전체/내 기록 탭) ↔ 올림 두 단계만 */
+@media (max-width: 899px) {
+  .app.panel-min { --peek: calc(88px + env(safe-area-inset-bottom, 0px)); }
+  .app.panel-min .panel .seg { opacity: 1; pointer-events: auto; }
+  .app.panel-min .panel-body { opacity: 0; pointer-events: none; }
+}
+
+/* 앱 실행 때 자동 소개: 시작하기 버튼 없이, 화면을 누르면 바로 홈 */
+.intro.auto .intro-go { display: none; }
+.intro.auto { cursor: pointer; }

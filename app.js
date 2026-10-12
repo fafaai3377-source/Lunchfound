@@ -306,20 +306,23 @@
     } else focusPlace(p);
   }
   // 휴대폰: 지도에 집중할 때 아래 목록을 손잡이만 남기고 내림 (손잡이·탭을 누르면 다시 올라옴)
-  // 목록 높이 3단계: min(손잡이만) · peek(중간) · open(크게)
+  // 목록 높이 2단계: min(내림 — 손잡이 + 전체/내 기록 탭) · open(올림). 누르든 밀든 항상 같은 두 위치
   function setPanel(stage) {
     if (desk()) return;
+    if (stage !== "open") stage = "min";
     const app = $("#app"), panel = $("#panel");
     panel.style.height = ""; panel.style.transition = "";
     app.classList.toggle("panel-min", stage === "min");
     panel.dataset.open = stage === "open" ? "true" : "false";
   }
-  const panelStage = () => ($("#app").classList.contains("panel-min") ? "min" : $("#panel").dataset.open === "true" ? "open" : "peek");
-  function collapsePanel(on) { setPanel(on ? "min" : "peek"); }
+  const panelStage = () => ($("#panel").dataset.open === "true" ? "open" : "min");
+  function collapsePanel(on) { setPanel(on ? "min" : "open"); }
   // 쓸어 올리기·내리기: 손잡이·탭 줄, 또는 목록 맨 위에서 아래로 당길 때
   function initPanelSwipe() {
     const panel = $("#panel"), body = $("#panelBody");
-    const heights = () => ({ min: 34 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sab")) || 0), peek: 236, open: innerHeight * 0.74 });
+    // 아이폰 아래 홈 바 높이(safe area)를 실제 px로 재서 CSS의 내림 높이(88px + safe area)와 똑같이 맞춤
+    const probe = document.createElement("div"); probe.style.cssText = "position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)"; document.body.appendChild(probe);
+    const heights = () => ({ min: 88 + (parseFloat(getComputedStyle(probe).paddingBottom) || 0), open: innerHeight * 0.74 });
     let drag = null;
     const start = (e, fromBody) => {
       if (desk() || e.pointerType === "mouse" && e.button !== 0) return;
@@ -348,12 +351,11 @@
       setTimeout(() => document.removeEventListener("click", swallow, true), 400);
       const H = heights(), h = panel.getBoundingClientRect().height;
       const v = (d.y - e.clientY) / Math.max(1, performance.now() - d.t);   // 위로 빠르게 = +
-      const order = ["min", "peek", "open"];
-      let stage = order.reduce((a, k) => (Math.abs(H[k] - h) < Math.abs(H[a] - h) ? k : a), "peek");
-      if (Math.abs(v) > 0.5) {   // 빠르게 튕기면 그 방향으로 한 단계 더
-        const cur = order.indexOf(order.reduce((a, k) => (Math.abs(H[k] - d.h) < Math.abs(H[a] - d.h) ? k : a), "peek"));
-        stage = order[Math.max(0, Math.min(2, cur + (v > 0 ? 1 : -1)))];
-      }
+      // 두 위치 중 하나로: 튕긴 방향이 있으면 그 방향, 아니면 1/3 이상 끌었는지로 결정
+      const from = d.h > (H.min + H.open) / 2 ? "open" : "min";
+      let stage = from;
+      if (Math.abs(v) > 0.35) stage = v > 0 ? "open" : "min";
+      else if (Math.abs(h - d.h) > (H.open - H.min) / 3) stage = h > d.h ? "open" : "min";
       panel.style.transition = ""; panel.style.height = "";
       setPanel(stage);
     };
@@ -576,7 +578,6 @@
       state.cats = !c ? [] : state.cats.includes(c) ? state.cats.filter((x) => x !== c) : [...state.cats, c];
       hideTip(); renderAll();
       // 필터를 바꾸면 결과 목록을 바로 보여줌 (모바일은 목록을 중간 높이로)
-      if (!desk() && $("#app").classList.contains("panel-min")) setPanel("peek");
       if (state.cats.length) {
         const n = state.places.filter((p) => passes(stats(p), p)).length;
         toast(n ? `${filterLabel()} · ${n}곳` : "조건에 맞는 곳이 없어요");
@@ -1527,7 +1528,7 @@
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       if (!hadController || reloaded || state.sheet === "review" || state.sheet === "pin") return;
-      reloaded = true; location.reload();
+      reloaded = true; try { sessionStorage.setItem("lf-skip-intro", "1"); } catch {} location.reload();
     });
     navigator.serviceWorker.register("./sw.js").then((reg) => {
       const check = () => reg.update().catch(() => {});
@@ -1554,9 +1555,12 @@
   }
 
   // ───────── 첫 화면 소개 (모션그래픽) ─────────
-  function showIntro(next) {
+  // auto=true: 로그인된 상태로 앱을 켰을 때 — 버튼 없이 모션만 보여주고 저절로 홈으로 (화면을 누르면 바로 넘어감)
+  // auto=false: 로그아웃 상태 — 모션 뒤 "시작하기" 버튼 → 로그인
+  function showIntro(next, auto = false) {
     const el = $("#intro");
-    $("#login").hidden = true; $("#app").hidden = true; el.hidden = false;
+    $("#login").hidden = true; if (!auto) $("#app").hidden = true; el.hidden = false;
+    el.classList.toggle("auto", auto);
     $("#introBrand").innerHTML = $("#loginBrand").innerHTML;
     const vid = $("#introVideo"), svg = $(".intro-svg");
     if (C.introVideo) { vid.src = C.introVideo; vid.hidden = false; svg.style.display = "none"; vid.play?.().catch(() => {}); }
@@ -1564,7 +1568,14 @@
       const replay = () => { svg.classList.remove("play"); void svg.getBoundingClientRect(); svg.classList.add("play"); };
       replay(); el._loop = setInterval(replay, 8600);
     }
-    $("#introGo").onclick = () => { clearInterval(el._loop); el.classList.add("leave"); setTimeout(() => { el.hidden = true; el.classList.remove("leave"); next(); }, 260); };
+    let left = false;
+    const leave = () => { if (left) return; left = true; clearInterval(el._loop); clearTimeout(el._auto); el.onclick = null; el.classList.add("leave"); setTimeout(() => { el.hidden = true; el.classList.remove("leave", "auto"); next(); }, 260); };
+    $("#introGo").onclick = leave;
+    if (auto) {
+      clearInterval(el._loop);   // 자동 모드는 한 번만 재생
+      el._auto = setTimeout(leave, matchMedia("(prefers-reduced-motion: reduce)").matches ? 1200 : 3400);
+      el.onclick = leave;
+    } else el.onclick = null;
   }
 
   // ───────── 내 정보 ─────────
@@ -1646,7 +1657,8 @@
 
   function bindUI() {
     $$("#tabs button").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); setPanel("open"); renderPanel(); stagger(); renderMarkers(); }));
-    $("#grab").onclick = () => setPanel({ min: "peek", peek: "open", open: "peek" }[panelStage()]);
+    $("#grab").onclick = () => setPanel(panelStage() === "open" ? "min" : "open");
+    setPanel("min");   // 처음엔 내린 상태로 지도에 집중
     initPanelSwipe();
     $("#fab").onclick = openAdd;
     $("#rouletteBtn").onclick = openRoulette;
@@ -1666,7 +1678,7 @@
 
   async function start(user) {
     state.user = user;
-    $("#login").hidden = true; $("#intro").hidden = true; $("#app").hidden = false;
+    $("#login").hidden = true; if (!$("#intro").classList.contains("auto")) $("#intro").hidden = true; $("#app").hidden = false;   // 자동 소개 모션 중이면 그 뒤에서 미리 준비
     const me = $("#meBtn"); me.style.background = hue(user.name);
     me.innerHTML = `${esc(user.name.charAt(0))}${photoOf(user.name) ? `<img src="${photoOf(user.name)}" alt="" onerror="this.remove()">` : ""}`;
     if (state.store.demo) $("#demoBadge").hidden = false;
@@ -1722,7 +1734,10 @@
     $("#themeBtnLogin").onclick = () => { const order = ["light", "dark", "system"]; applyTheme(order[(order.indexOf(themePref()) + 1) % 3]); };
     // 스플래시: 최소 0.9초 보여준 뒤 부드럽게 사라짐 (그동안 데이터 준비)
     const t0 = performance.now(), sp = $("#splash");
-    const hideSplash = () => { if (!sp) return; setTimeout(() => { sp.classList.add("hide"); setTimeout(() => { sp.remove(); applyTheme(themePref()); }, 400); }, Math.max(0, 900 - (performance.now() - t0))); };
+    let splashGone; const afterSplash = new Promise((r) => (splashGone = r));   // 스플래시가 걷히기 시작하는 순간
+    const hideSplash = () => { if (!sp) return splashGone(); setTimeout(() => { splashGone(); sp.classList.add("hide"); setTimeout(() => { sp.remove(); applyTheme(themePref()); }, 400); }, Math.max(0, 900 - (performance.now() - t0))); };
+    // 새 버전으로 자동 새로고침한 직후엔 소개 모션을 다시 보여주지 않음
+    let skipIntro = false; try { skipIntro = sessionStorage.getItem("lf-skip-intro") === "1"; sessionStorage.removeItem("lf-skip-intro"); } catch {}
     state.store = await createStore();
     hideSplash();
     let started = false;
@@ -1732,11 +1747,19 @@
         const login = () => {
           showLogin({ error: err });
         };
-        if (err) return login();
-        return showIntro(login);   // 로그인 전 첫 화면: 모션그래픽 소개
+        if (err) { skipIntro = true; return login(); }
+        await afterSplash;
+        skipIntro = true;   // 방금 소개를 봤으니 로그인한 뒤엔 바로 홈으로
+        return showIntro(login);   // 로그인 전 첫 화면: 모션그래픽 소개 + 시작하기 버튼
       }
       const prof = await state.store.getProfile(u.uid);
-      if (prof?.memberName && (member(prof.memberName) || prof.admin)) { started = true; return start({ ...u, name: prof.memberName, admin: !!prof.admin }); }
+      if (prof?.memberName && (member(prof.memberName) || prof.admin)) {
+        started = true;
+        // 앱 실행: 스플래시 → 지도 모션(버튼 없음) → 홈. 그동안 뒤에서 지도·데이터를 준비
+        await afterSplash;
+        if (!skipIntro) showIntro(() => { $("#app").hidden = false; }, true);
+        return start({ ...u, name: prof.memberName, admin: !!prof.admin });
+      }
       window.__pickMember = async (name) => { await state.store.setProfile(u.uid, name); started = true; start({ ...u, name }); };
       showLogin();
     });
