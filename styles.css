@@ -628,3 +628,39 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .lightbox .lb-prev { left: 12px; right: auto; }
 .lightbox .lb-next { right: 12px; left: auto; }
 .lightbox .lb-n { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; font-weight: 600; background: rgba(0,0,0,.45); padding: 4px 12px; border-radius: 9999px; white-space: nowrap; }
+
+/* ═════════ 정보 카드 v2: 왼쪽 대표 음식 사진 + 오른쪽 정보 (PC 호버·모바일 탭 공통) ═════════ */
+.tip, .tip.pinned { width: 320px; padding: 10px; overflow: hidden; }
+.tip.pinned { pointer-events: auto; }
+.tc { display: flex; gap: 12px; align-items: stretch; }
+.tc-ph { position: relative; flex: none; width: 84px; height: 84px; border-radius: 12px; overflow: hidden; background: var(--fill); display: grid; place-items: center; font-size: 34px; }
+.tc-ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+.tc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.tc-name { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-line { font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-line b { color: var(--ink); font-weight: 600; }
+.tc-line .star { font-style: normal; color: #FFB800; }
+.tc-picks { display: flex; gap: 4px; overflow: hidden; margin-top: 2px; }
+.tc-picks span { flex: none; font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 9999px; background: var(--accent-tint); color: var(--accent); white-space: nowrap; }
+.tc-memo { margin-top: 8px; padding: 7px 10px; border-radius: 10px; background: var(--fill); font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-act { display: flex; justify-content: flex-end; margin-top: 8px; }
+.tip-more { white-space: nowrap; }
+@media (max-width: 899px) { .tip.pinned { width: auto; } }
+
+/* ═════════ 공통 필터 바 ═════════ */
+.filters { margin-top: 8px; padding: 2px 2px 8px; }
+.filters .chip { min-height: 34px; padding: 6px 12px; font-size: 14px; white-space: nowrap; }
+.filters .chip .n { font-size: 12px; color: var(--ink-3); font-weight: 500; margin-left: 2px; }
+.filters .chip[aria-pressed="true"] .n { color: inherit; opacity: .7; }
+.pin.hide { display: none; }
+
+/* ═════════ 목록 쓸어 올리기 ═════════ */
+#grab, #tabs { touch-action: none; }
+.grabber { padding: 10px 0 6px; cursor: grab; }
+.panel-body { overscroll-behavior: contain; }
+
+/* ═════════ 모바일 줄바꿈 방지 (버튼·칩·태그·탭은 항상 한 줄) ═════════ */
+.btn, .chip, .tag, .seg button, .tip-more, .meet-btn, .roulette-btn, .link, .row-walk, .stat .k, .stat .v { white-space: nowrap; }
+.btn { overflow: hidden; text-overflow: ellipsis; }
+.btns .btn { min-width: 0; }
+.section-h, .sheet-head h2, .h3 { overflow-wrap: anywhere; }

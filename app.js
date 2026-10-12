@@ -63,7 +63,7 @@
     seenMeet: new Set(), meetInit: false, mf: null,
     filters: { solo: false, wait: false, cheap: false },
     sort: "popular",   // 전체 목록 정렬: popular(지난주 인기) / rating(별점 높은 순) / near(가까운 순)
-    tab: "top", cat: "", sheet: null, selected: null, adding: false, ghost: null, form: null,
+    tab: "top", cats: [], sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
     rl: { cats: [], off: new Set(), skipYesterday: true, includeWish: true, spinning: false },
   };
@@ -102,7 +102,7 @@
       memo: rs.find((r) => r.memo)?.memo || "",
     };
   }
-  const anyFilter = () => Object.values(state.filters).some(Boolean) || (state.tab === "list" && !!state.cat);
+  const anyFilter = () => state.cats.length > 0;
   // 특별 카테고리 — 혼밥: 멤버 기록이 대부분 "혼자 OK" / 거지맵: 멤버가 만원 미만으로 먹은 기록이 있는 곳
   const SPECIAL = {
     "@solo": { label: "🍙 혼밥", test: (st) => st.solo === "ok" },
@@ -117,7 +117,8 @@
   const sorter = (k) => (k === "rating" ? byRating : k === "near" ? byNear : byPopular);
   function passes(st, p) {
     const f = state.filters;
-    if (p && state.tab === "list" && state.cat && !inCat({ p, st }, state.cat)) return false;
+    // 공통 필터(상단 칩): 고른 것 중 하나라도 맞으면 보여줌 — 지도 핀·추천·전체 목록에 똑같이 적용
+    if (p && state.cats.length && !state.cats.some((c) => inCat({ p, st }, c))) return false;
     if (f.solo && st.solo !== "ok") return false;
     if (f.wait && st.wait !== "none") return false;
     if (f.cheap && !(st.price > 0 && st.price <= C.cheapPrice)) return false;
@@ -260,18 +261,78 @@
       lastPinTap = Date.now();
       const p = placeById(d.id), pin = state.markers.get(d.id) && document.querySelector(`.pin[data-pid="${CSS.escape(d.id)}"]`);
       // PC: 바로 오른쪽 상세 메뉴로 / 모바일: 작은 카드 → "자세히 보기"로 아래에서 올라옴
-      if (desk() || !p || !pin) { hideTip(); openPlace(d.id); } else { collapsePanel(true); showTip(p, pin, true); }
+      if (desk() || !p || !pin) { hideTip(true); openPlace(d.id); } else previewPlace(p, pin);
     }, true);
     renderMarkers();
   }
 
   let lastPinTap = 0;
+  // 모바일: 핀을 누르면 바로 도보 경로 모션 + 위쪽 정보 카드 (상세는 "자세히 보기"로)
+  function previewPlace(p, pin) {
+    collapsePanel(true);
+    showTip(p, pin, true);
+    state.selected = p.id;
+    renderMarkers();
+    const wi = walkInfo(p.lat, p.lng);
+    if (wi.path && MapKit.showRoute) {
+      const top = Math.round(($("#tip").getBoundingClientRect().bottom || 220) + 24);
+      MapKit.showRoute(wi.path, { top, right: 44, bottom: 70, left: 44 });
+      state.routeFor = p.id;
+    } else focusPlace(p);
+  }
   // 휴대폰: 지도에 집중할 때 아래 목록을 손잡이만 남기고 내림 (손잡이·탭을 누르면 다시 올라옴)
-  function collapsePanel(on) {
+  // 목록 높이 3단계: min(손잡이만) · peek(중간) · open(크게)
+  function setPanel(stage) {
     if (desk()) return;
     const app = $("#app"), panel = $("#panel");
-    app.classList.toggle("panel-min", on);
-    if (on) panel.dataset.open = "false";
+    panel.style.height = ""; panel.style.transition = "";
+    app.classList.toggle("panel-min", stage === "min");
+    panel.dataset.open = stage === "open" ? "true" : "false";
+  }
+  const panelStage = () => ($("#app").classList.contains("panel-min") ? "min" : $("#panel").dataset.open === "true" ? "open" : "peek");
+  function collapsePanel(on) { setPanel(on ? "min" : "peek"); }
+  // 쓸어 올리기·내리기: 손잡이·탭 줄, 또는 목록 맨 위에서 아래로 당길 때
+  function initPanelSwipe() {
+    const panel = $("#panel"), body = $("#panelBody");
+    const heights = () => ({ min: 34 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sab")) || 0), peek: 236, open: innerHeight * 0.74 });
+    let drag = null;
+    const start = (e, fromBody) => {
+      if (desk() || e.pointerType === "mouse" && e.button !== 0) return;
+      drag = { y: e.clientY, h: panel.getBoundingClientRect().height, t: performance.now(), moved: false, fromBody, id: e.pointerId };
+    };
+    panel.addEventListener("pointerdown", (e) => { if (e.target.closest("#grab, #tabs")) start(e, false); });
+    body.addEventListener("pointerdown", (e) => { if (body.scrollTop <= 0) start(e, true); });
+    addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dy = e.clientY - drag.y;
+      if (!drag.moved) {
+        if (Math.abs(dy) < 8) return;
+        if (drag.fromBody && (dy < 0 || body.scrollTop > 0)) { drag = null; return; }   // 목록 안에서 위로 밀면 그냥 스크롤
+        drag.moved = true; panel.style.transition = "none"; hideTip();
+      }
+      const H = heights();
+      panel.style.height = `${Math.max(H.min, Math.min(H.open, drag.h - dy))}px`;
+    }, { passive: true });
+    const end = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const d = drag; drag = null;
+      if (!d.moved) return;
+      // 드래그 직후 따라오는 click(탭 전환·가게 열기)은 무시
+      const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      document.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => document.removeEventListener("click", swallow, true), 400);
+      const H = heights(), h = panel.getBoundingClientRect().height;
+      const v = (d.y - e.clientY) / Math.max(1, performance.now() - d.t);   // 위로 빠르게 = +
+      const order = ["min", "peek", "open"];
+      let stage = order.reduce((a, k) => (Math.abs(H[k] - h) < Math.abs(H[a] - h) ? k : a), "peek");
+      if (Math.abs(v) > 0.5) {   // 빠르게 튕기면 그 방향으로 한 단계 더
+        const cur = order.indexOf(order.reduce((a, k) => (Math.abs(H[k] - d.h) < Math.abs(H[a] - d.h) ? k : a), "peek"));
+        stage = order[Math.max(0, Math.min(2, cur + (v > 0 ? 1 : -1)))];
+      }
+      panel.style.transition = ""; panel.style.height = "";
+      setPanel(stage);
+    };
+    addEventListener("pointerup", end); addEventListener("pointercancel", end);
   }
   const popped = new Set();
   function renderMarkers() {
@@ -282,7 +343,7 @@
     for (const p of state.places) {
       const st = stats(p), fresh = st.count === 0;
       const el = document.createElement("div");
-      el.className = ["pin", fresh && "wish", anyFilter() && !passes(st, p) && "dim", state.selected === p.id && "on"].filter(Boolean).join(" ");
+      el.className = ["pin", fresh && "wish", anyFilter() && !passes(st, p) && state.selected !== p.id && "hide", state.selected === p.id && "on"].filter(Boolean).join(" ");
       const label = fresh ? (st.wish.length ? ` <span class="pin-n">♡${st.wish.length}</span>` : "") : ` <span class="pin-r">${st.avg.toFixed(1)}</span>`;
       el.innerHTML = `<div class="pin-b"><span class="pin-e">${emojiFor(p)}</span>${label}</div><div class="pin-t"></div><div class="pin-l">${esc(p.name)}</div>`;
       if (!popped.has(p.id)) { popped.add(p.id); el.classList.add("pop"); el.style.setProperty("--d", `${Math.min(order++ * 35, 700)}ms`); }
@@ -303,8 +364,8 @@
     st.visited.filter((r) => r.menu).forEach((r) => { const k = r.menu.trim(); c[k] = (c[k] || 0) + 1 + (r.rating || 0) / 10; });
     return Object.entries(c).sort((x, y) => y[1] - x[1])[0]?.[0] || p.note || "";
   }
-  // pinned=true: 핀을 눌렀을 때 고정되는 카드 (휴대폰·PC 공통) — 오른쪽 아래 "자세히 보기"
-  // pinned=false: PC에서 마우스만 올렸을 때 잠깐 보이는 미리보기
+  // 정보 카드 — 왼쪽 대표 음식 사진 썸네일 + 오른쪽 정보 (PC 호버·모바일 탭 공통 디자인)
+  // pinned=false: PC 마우스 호버 미리보기(핀 근처) / pinned=true: 모바일 탭 → 화면 위쪽에 가로로 꽉 차게 + "자세히 보기"
   function showTip(p, el, pinned = false) {
     if ((!pinned && !canHover()) || state.adding) return;
     const st = stats(p), wi = walkInfo(p.lat, p.lng), menu = topMenu(p, st), tip = $("#tip");
@@ -312,29 +373,45 @@
     const photo = memberThumb(p) || curImage(p)?.image || "";
     tipPinned = pinned ? p.id : null;
     tip.classList.toggle("pinned", pinned);
-    tip.innerHTML = `${photo ? `<div class="tip-photo"><img src="${esc(photo)}" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.remove()" /></div>` : ""}<div class="tip-h">${emojiFor(p)} <b>${esc(p.name)}</b></div>
-      <div class="tip-r"><span>카테고리</span><b>${esc(p.category || "기타")}</b></div>
-      <div class="tip-r"><span>대표 메뉴</span><b>${menu ? esc(menu) : "아직 기록 없음"}</b></div>
-      <div class="tip-r"><span>사옥에서</span><b>걸어서 ${wi.min}분${dist}</b></div>
-      ${st.count ? `<div class="tip-r"><span>멤버 별점</span><b><i class="star">★</i> ${st.avg.toFixed(1)} (${st.count})${st.wait ? ` · 웨이팅 ${WAIT_S[st.wait]}` : ""}${st.price ? ` · ${won(st.price)}` : ""}</b></div>` : `<div class="tip-foot">아직 멤버 기록이 없어요${pinned ? "" : " · 눌러서 자세히 보기"}</div>`}
-      ${st.picks.length ? `<div class="tip-picks">${st.picks.slice(0, 3).map(([k]) => `<span>${PICKS[k]}</span>`).join("")}</div>` : ""}
-      ${st.memo ? `<div class="tip-memo">“${esc(st.memo)}”</div>` : ""}
-      ${pinned ? `<div class="tip-act"><button class="tip-more" data-tip-more>자세히 보기 ›</button></div>` : ""}`;
-    if (pinned) $("[data-tip-more]", tip).onclick = (e) => { e.stopPropagation(); hideTip(); openPlace(p.id); };
-    const r = el.querySelector(".pin-b").getBoundingClientRect();
+    tip.innerHTML = `<div class="tc">
+        <div class="tc-ph">${photo ? `<img src="${esc(photo)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" />` : ""}<span>${emojiFor(p)}</span></div>
+        <div class="tc-body">
+          <div class="tc-name">${esc(p.name)}</div>
+          <div class="tc-line">${esc(p.category || "기타")} · <b>도보 ${wi.min}분</b>${dist}</div>
+          <div class="tc-line">${st.count ? `<i class="star">★</i> <b>${st.avg.toFixed(1)}</b> (${st.count})` : "아직 기록 없음"}${menu ? ` · ${esc(menu)}` : ""}</div>
+          ${st.picks.length ? `<div class="tc-picks">${st.picks.slice(0, 3).map(([k]) => `<span>${PICKS[k]}</span>`).join("")}</div>` : ""}
+        </div>
+      </div>
+      ${st.memo ? `<div class="tc-memo">“${esc(st.memo)}”</div>` : ""}
+      ${pinned ? `<div class="tc-act"><button class="tip-more" data-tip-more>자세히 보기 ›</button></div>` : ""}`;
+    if (pinned) $("[data-tip-more]", tip).onclick = (e) => { e.stopPropagation(); hideTip(true); openPlace(p.id); };
     tip.hidden = false;
-    const w = tip.offsetWidth, h = tip.offsetHeight;
-    let x = r.left + r.width / 2 - w / 2, y = r.top - h - 10, below = false;
-    if (y < 70) { y = r.bottom + 30; below = true; }
-    x = Math.max(8, Math.min(innerWidth - w - 8, x));
-    tip.style.left = `${x}px`; tip.style.top = `${y}px`;
-    tip.classList.toggle("below", below);
+    if (pinned && !desk()) {
+      // 모바일: 상단 버튼·필터 아래에 가로로 꽉 차게
+      const top = ($(".topbar")?.getBoundingClientRect().bottom || 100) + 6;
+      tip.style.left = "12px"; tip.style.right = "12px"; tip.style.top = `${top}px`; tip.style.width = "auto";
+      tip.classList.add("below");
+    } else {
+      tip.style.right = ""; tip.style.width = "";
+      const r = el.querySelector(".pin-b").getBoundingClientRect();
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      let x = r.left + r.width / 2 - w / 2, y = r.top - h - 10, below = false;
+      if (y < 110) { y = r.bottom + 30; below = true; }
+      x = Math.max(8, Math.min(innerWidth - w - 8, x));
+      tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+      tip.classList.toggle("below", below);
+    }
     // 첫 카드만 등장 모션, 이어서 다른 핀으로 옮길 땐 바로 (애니메이션 반복으로 굼떠 보이지 않게)
     tip.classList.toggle("instant", Date.now() - tipShownAt < 400);
     tip.classList.remove("show"); void tip.offsetWidth; tip.classList.add("show");
     tipShownAt = Date.now();
   }
-  function hideTip() { tipPinned = null; const t = $("#tip"); if (t) { t.classList.remove("show", "pinned"); t.hidden = true; tipShownAt = Date.now(); } }
+  function hideTip(keepRoute) {
+    const wasPinned = tipPinned; tipPinned = null;
+    const t = $("#tip"); if (t) { t.classList.remove("show", "pinned"); t.hidden = true; tipShownAt = Date.now(); }
+    // 모바일에서 핀만 눌러 경로를 보여주던 중이면, 카드를 닫을 때 경로·선택도 같이 정리
+    if (wasPinned && !keepRoute && !state.sheet) { state.selected = null; state.routeFor = null; MapKit.clearRoute?.(); renderMarkers(); }
+  }
 
   function onMapTap(lat, lng) {
     if (!state.adding) {
@@ -369,40 +446,33 @@
     const body = $("#panelBody"), all = state.places.map((p) => ({ p, st: stats(p) }));
     let html = "";
     if (state.tab === "top") {
-      const top = all.filter((x) => x.st.count && passes(x.st)).sort((a, b) => b.st.avg - a.st.avg || b.st.count - a.st.count || a.st.walk - b.st.walk).slice(0, 3);
+      const top = all.filter((x) => x.st.count && passes(x.st, x.p)).sort((a, b) => b.st.avg - a.st.avg || b.st.count - a.st.count || a.st.walk - b.st.walk).slice(0, 3);
       html = `<div class="section-h">오늘의 추천</div><div class="section-sub">멤버 별점이 높은 순${anyFilter() ? " · 필터 적용" : ""}</div>` +
         (top.length ? top.map((x, i) => rowHTML(x, i + 1)).join("") : `<p class="empty">${anyFilter() ? "조건에 맞는 곳이 없어요. 필터를 하나 꺼보세요." : "아직 별점이 남은 곳이 없어요. 오늘 먹은 곳부터 남겨보세요."}</p>`);
     } else if (state.tab === "list") {
       // 정렬(지난주 인기 / 별점 / 가까운 순) + 카테고리 칩(혼밥·거지맵 포함) / 전체일 때는 카테고리별로 묶어서
-      const base = all.filter((x) => passes(x.st));
-      const count = (c) => base.filter((x) => inCat(x, c)).length;
-      const cats = CATS.filter((c) => count(c));
-      const specials = Object.keys(SPECIAL);
+      const base = all.filter((x) => passes(x.st, x.p));
+      const cats = CATS.filter((c) => base.some((x) => (x.p.category || "기타") === c));
       const sortFn = sorter(state.sort);
       const sortBar = `<div class="seg sortbar" role="group" aria-label="정렬">${Object.entries(SORTS).map(([k, v]) => `<button data-sort="${k}" aria-pressed="${state.sort === k}">${v}</button>`).join("")}</div>`;
-      const chips = `<div class="catbar"><button class="chip" data-cat="" aria-pressed="${!state.cat}">전체<span class="n">${base.length}</span></button>${specials.map((c) => `<button class="chip special" data-cat="${c}" aria-pressed="${state.cat === c}">${SPECIAL[c].label}<span class="n">${count(c)}</span></button>`).join("")}${cats.map((c) => `<button class="chip" data-cat="${c}" aria-pressed="${state.cat === c}">${catLabel(c)}<span class="n">${count(c)}</span></button>`).join("")}</div>`;
       let body2;
-      if (state.cat) {
-        const list = base.filter((x) => inCat(x, state.cat)).sort(sortFn);
-        const emptyMsg = state.cat === "@solo" ? "아직 혼밥 기록이 없어요. 기록할 때 '혼자 OK'를 골라주세요."
-          : state.cat === "@cheap" ? "아직 만원 미만 기록이 없어요. 기록할 때 가격을 적어주세요." : "이 카테고리에 등록된 곳이 없어요.";
-        body2 = list.length ? list.map((x) => rowHTML(x)).join("") : `<p class="empty">${emptyMsg}</p>`;
+      if (!base.length) {
+        body2 = `<p class="empty">${anyFilter() ? "필터에 맞는 곳이 없어요. 위쪽 필터를 바꿔보세요." : "아직 등록된 곳이 없어요. + 장소 추가로 첫 가게를 등록해 주세요."}</p>`;
       } else if (state.sort !== "near") {
         // 인기·별점 순은 카테고리 구분 없이 한 줄로 (순위가 잘 보이게)
         const list = [...base].sort(sortFn);
-        body2 = list.length ? list.map((x, i) => rowHTML(x, (state.sort === "popular" ? x.st.week : x.st.count) ? i + 1 : 0)).join("") : `<p class="empty">아직 등록된 곳이 없어요.</p>`;
+        body2 = list.map((x, i) => rowHTML(x, (state.sort === "popular" ? x.st.week : x.st.count) ? i + 1 : 0)).join("");
       } else {
-        body2 = cats.length ? cats.map((c) => { const list = base.filter((x) => inCat(x, c)).sort(sortFn);
-          return `<div class="group-h">${catLabel(c)}<span class="n">${list.length}곳</span></div>` + list.map((x) => rowHTML(x)).join(""); }).join("")
-          : `<p class="empty">아직 등록된 곳이 없어요. + 장소 추가로 첫 가게를 등록해 주세요.</p>`;
+        body2 = cats.map((c) => { const list = base.filter((x) => (x.p.category || "기타") === c).sort(sortFn);
+          return `<div class="group-h">${catLabel(c)}<span class="n">${list.length}곳</span></div>` + list.map((x) => rowHTML(x)).join(""); }).join("");
       }
       const sub = state.sort === "popular" ? "지난 7일 동안 멤버가 많이 다녀온 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
-      html = `<div class="section-h">전체 ${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${chips}${body2}`;
+      html = `<div class="section-h">${anyFilter() ? `${esc(filterLabel())} ` : "전체 "}${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${body2}`;
     } else {
       const mine = state.reviews.filter((r) => r.uid === state.user.uid).sort((a, b) => b.createdAt - a.createdAt);
       const im = myImpact();
       html = `<div class="section-h">내 기록 ${mine.length}</div><div class="section-sub">${esc(state.user.name)}님이 남긴 기록</div>` +
-        (im.places ? `<div class="impact"><span class="impact-n">${im.viewers}</span><span>${im.viewers ? `내가 기록한 ${im.places}곳을 멤버 <b>${im.viewers}명</b>이 봤어요` : `내가 기록한 ${im.places}곳, 아직 본 멤버가 없어요. 약속으로 같이 가볼까요?`}</span></div>` : "") +
+        (im.places ? `<div class="impact"><span class="impact-n">${im.viewers}</span><span>${im.viewers ? `내 기록 ${im.places}곳 · 멤버 <b>${im.viewers}명</b>이 봤어요` : `내 기록 ${im.places}곳 · 아직 본 멤버 없음`}</span></div>` : "") +
         (mine.length ? mine.map((r) => { const p = placeById(r.placeId); if (!p) return "";
           return `<button class="row" data-place="${esc(p.id)}">${thumbHTML(p)}<div class="row-main"><div class="row-name">${esc(p.name)}</div>
             <div class="row-meta"><span class="rate">${r.status === "wish" ? "♡ 가고 싶어요" : `<i>★</i> ${r.rating}`}</span>${r.menu ? `<span>${esc(r.menu)}</span>` : ""}<span>${ago(r.createdAt)}</span></div></div></button>`; }).join("")
@@ -410,7 +480,6 @@
     }
     body.innerHTML = html;
     $$("[data-place]", body).forEach((b) => (b.onclick = () => openPlace(b.dataset.place)));
-    $$(".catbar [data-cat]", body).forEach((b) => (b.onclick = () => { state.cat = b.dataset.cat; renderPanel(); renderMarkers(); }));
     $$("[data-sort]", body).forEach((b) => (b.onclick = () => { state.sort = b.dataset.sort; renderPanel(); }));
   }
   function stagger() {
@@ -419,7 +488,32 @@
     body.classList.remove("stagger"); void body.offsetWidth; body.classList.add("stagger");
     setTimeout(() => body.classList.remove("stagger"), 700);
   }
+  // ───────── 공통 필터 바 (상단, 웹·앱 공통) ─────────
+  const catName = (c) => (SPECIAL[c] ? SPECIAL[c].label : catLabel(c));
+  const filterLabel = () => state.cats.map((c) => (SPECIAL[c] ? SPECIAL[c].label : c)).join(" · ");
+  function renderFilterBar() {
+    const bar = $("#filterbar"); if (!bar) return;
+    const all = state.places.map((p) => ({ p, st: stats(p) }));
+    const cnt = (c) => all.filter((x) => inCat(x, c)).length;
+    const keys = [...Object.keys(SPECIAL), ...CATS.filter((c) => cnt(c))];
+    const keep = bar.scrollLeft;
+    bar.innerHTML = `<button class="chip glass" data-f="" aria-pressed="${!state.cats.length}">전체 <span class="n">${all.length}</span></button>` +
+      keys.map((c) => `<button class="chip glass${SPECIAL[c] ? " special" : ""}" data-f="${c}" aria-pressed="${state.cats.includes(c)}">${catName(c)} <span class="n">${cnt(c)}</span></button>`).join("");
+    bar.scrollLeft = keep;
+    $$("[data-f]", bar).forEach((b) => (b.onclick = () => {
+      const c = b.dataset.f;
+      state.cats = !c ? [] : state.cats.includes(c) ? state.cats.filter((x) => x !== c) : [...state.cats, c];
+      hideTip(); renderAll();
+      // 필터를 바꾸면 결과 목록을 바로 보여줌 (모바일은 목록을 중간 높이로)
+      if (!desk() && $("#app").classList.contains("panel-min")) setPanel("peek");
+      if (state.cats.length) {
+        const n = state.places.filter((p) => passes(stats(p), p)).length;
+        toast(n ? `${filterLabel()} · ${n}곳` : "조건에 맞는 곳이 없어요");
+      }
+    }));
+  }
   function renderAll() {
+    renderFilterBar();
     renderMarkers();
     renderPanel();
     if (state.sheet === "place" && state.selected) renderPlace(state.selected);
@@ -447,7 +541,7 @@
       closeTimer = setTimeout(() => { s.hidden = true; sc.hidden = true; s.classList.remove("closing"); sc.classList.remove("closing"); }, 200);
     } else { s.hidden = true; sc.hidden = true; }
     state.sheet = null; state.selected = null; state.form = null; state.rl.spinning = false;
-    MapKit.clearRoute?.();
+    MapKit.clearRoute?.(); state.routeFor = null;
     renderMarkers();
   }
   const head = (title, sub) => `<div class="sheet-head"><div><h2>${title}</h2>${sub ? `<div class="sub">${sub}</div>` : ""}</div><button class="close" data-close aria-label="닫기">✕</button></div>`;
@@ -457,9 +551,11 @@
     const p = placeById(id); if (!p) return;
     state.selected = id;
     markView(p);
-    if (state.mapReady) {
+    // 모바일에서 핀을 눌러 이미 경로를 그린 가게면 다시 그리지 않음 (자세히 보기로 넘어갈 때 모션 반복 방지)
+    if (state.mapReady && state.routeFor === id) MapKit.fitRoute?.(routePad());
+    else if (state.mapReady) {
       const wi = walkInfo(p.lat, p.lng);
-      if (wi.path && MapKit.showRoute) MapKit.showRoute(wi.path, routePad()); else { MapKit.clearRoute?.(); focusPlace(p); }
+      if (wi.path && MapKit.showRoute) { MapKit.showRoute(wi.path, routePad()); state.routeFor = id; } else { MapKit.clearRoute?.(); focusPlace(p); state.routeFor = null; }
     }
     renderMarkers();
     renderPlace(id);
@@ -494,7 +590,7 @@
         <button class="btn btn-primary btn-block" data-act="review">기록 남기기</button>
         ${mineAny ? "" : `<button class="btn btn-secondary btn-block" data-act="wish">♡ 가고 싶어요</button>`}
         <button class="btn btn-plain btn-block" data-act="meet">🍽 여기로 오늘 약속 만들기</button>
-        <div class="btns"><a class="btn btn-plain" href="${l.naver}" data-dir="naver" target="_blank" rel="noopener">네이버 지도 길찾기</a><a class="btn btn-plain" href="${l.kakao}" data-dir="kakao" target="_blank" rel="noopener">카카오맵 길찾기</a></div>
+        <div class="btns"><a class="btn btn-plain" href="${l.naver}" data-dir="naver" target="_blank" rel="noopener">네이버 길찾기</a><a class="btn btn-plain" href="${l.kakao}" data-dir="kakao" target="_blank" rel="noopener">카카오 길찾기</a></div>
         <p class="dir-note">출발 ${esc(C.office.mapName || C.office.name)} · 도보 경로로 열려요</p>
       </div>
       ${st.picks.length ? `<div class="h3">멤버 추천 포인트</div><div class="picks">${st.picks.map(([k, n]) => `<span class="pick-agg">${PICKS[k]}<b>${n}</b></span>`).join("")}</div>` : ""}
@@ -739,7 +835,7 @@
   function openRoulette() {
     const rl = state.rl;
     // 전체 탭에서 카테고리를 골라둔 상태로 열면 그 카테고리로 시작
-    if (!rl.opened && state.cat) rl.cats = [state.cat];
+    if (!rl.opened && state.cats.length) rl.cats = [...state.cats];
     rl.opened = true;
     const render = () => {
       const prevScroll = state.sheet === "roulette" ? $("#sheet").scrollTop : 0;
@@ -884,7 +980,7 @@
       <div class="meet-host">${avatar(m.hostName, true)}<span><b>${esc(m.hostName)}님</b>${host ? " (나)" : ""}이 모집 중${m.note ? ` · ${esc(m.note)}` : ""}</span></div>
       <div class="meet-bottom"><div class="slots">${slots}</div><span class="meet-n${mtFull(m) ? " full" : ""}">${mtFull(m) ? "마감" : `선착순 ${n}/${m.capacity}명`}</span></div>
       <div class="meet-who">${ppl.length ? ppl.map((x) => `${esc(x.name)}님`).join(", ") + " 참여" : "아직 참여한 사람이 없어요"}</div>
-      <div class="btns" style="margin-top:12px">${action}<button class="btn btn-plain" data-mt-share="${esc(m.id)}">공유 문구 복사</button></div>
+      <div class="btns" style="margin-top:12px">${action}<button class="btn btn-plain" data-mt-share="${esc(m.id)}">공유하기</button></div>
       ${!host && isAdmin() ? `<button class="link danger" data-mt-del="${esc(m.id)}" style="margin-top:10px">이 약속 취소 (관리자)</button>` : ""}
     </div>`;
   }
@@ -893,7 +989,7 @@
     const list = [...state.meetups].sort((x, y) => String(x.date).localeCompare(String(y.date)) || x.createdAt - y.createdAt);
     const canNotify = "Notification" in window;
     const s = showSheet(`
-      ${head("오늘 약속", `<span>점심 ${LUNCH.start}~${LUNCH.end} · 같이 먹을 사람을 선착순으로 모아요</span>`)}
+      ${head("오늘 약속", `<span>점심 ${LUNCH.start}~${LUNCH.end} · 선착순 모집</span>`)}
       <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="mtNew">+ 약속 만들기</button></div>
       ${pushCard()}
       <div class="h3">${nextWord()} 점심 ${list.filter((m) => !mtPast(m)).length ? `${list.filter((m) => !mtPast(m)).length}건` : ""}</div>
@@ -934,7 +1030,7 @@
         .filter((x) => !f.q || x.p.name.replace(/\s/g, "").includes(f.q.replace(/\s/g, ""))).sort(sorter(f.sort)).slice(0, 8);
       const why = (x) => f.sort === "popular" && x.st.week ? `지난주 ${x.st.week}번 · ` : f.sort !== "near" && x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : "";
       const s = showSheet(`
-        ${head("약속 만들기", `<span>${targetDate() !== TODAY() ? `오늘 점심시간이 아니라서 ${nextWord()} 점심 약속으로 올라가요` : "오늘 ○○ 먹으실 분! 을 올려요"}</span>`)}
+        ${head("약속 만들기", `<span>${targetDate() !== TODAY() ? `${nextWord()} 점심 약속으로 올라가요` : "오늘 ○○ 먹으실 분! 을 올려요"}</span>`)}
         <div class="field"><span class="flabel">어디서</span>
           ${p ? `<div class="pick">${thumbHTML(p)}<div style="flex:1;min-width:0"><div class="nm">${esc(p.name)}</div><div class="ad">${esc(p.category || "기타")} · 사옥에서 도보 ${walkMin(p.lat, p.lng)}분</div></div><button class="link" id="mfChange">바꾸기</button></div>`
           : `<input class="input" id="mfQ" placeholder="등록된 가게 이름 검색" value="${esc(f.q)}" autocomplete="off" />
@@ -1217,7 +1313,7 @@
       <div class="field"><span class="flabel">알림</span>${pushCard()}</div>
       <div class="stack" style="margin-top:18px">
         <button class="btn btn-plain btn-block" id="installBtn">📲 앱으로 설치 (홈 화면에 추가)</button>
-        ${state.store.demo ? `<div class="h3" style="margin-top:14px">알림 미리보기</div><div class="btns"><button class="btn btn-plain" id="pvPopular">12시 인기 장소</button><button class="btn btn-plain" id="pvRecord">점심 후 기록 요청</button></div>
+        ${state.store.demo ? `<div class="h3" style="margin-top:14px">알림 미리보기</div><div class="btns"><button class="btn btn-plain" id="pvPopular">12시 인기 장소</button><button class="btn btn-plain" id="pvRecord">기록 요청</button></div>
         <button class="btn btn-plain btn-block" id="pvIntro">첫 화면 소개 다시 보기</button>` : ""}
         ${state.store.demo ? `<button class="btn btn-plain btn-block" id="switchMe">다른 멤버로 보기</button><button class="btn btn-secondary btn-block" id="resetDemo">미리보기 데이터 처음으로</button>` : `<button class="btn btn-plain btn-block" id="logout">로그아웃</button>`}
       </div>`, "me");
@@ -1285,12 +1381,9 @@
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1900); }
 
   function bindUI() {
-    $$("#tabs button").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); collapsePanel(false); $("#panel").dataset.open = "true"; renderPanel(); stagger(); renderMarkers(); }));
-    $("#grab").onclick = () => {
-      const p = $("#panel");
-      if ($("#app").classList.contains("panel-min")) { collapsePanel(false); return; }
-      p.dataset.open = p.dataset.open === "true" ? "false" : "true";
-    };
+    $$("#tabs button").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); setPanel("open"); renderPanel(); stagger(); renderMarkers(); }));
+    $("#grab").onclick = () => setPanel({ min: "peek", peek: "open", open: "peek" }[panelStage()]);
+    initPanelSwipe();
     $("#fab").onclick = openAdd;
     $("#rouletteBtn").onclick = openRoulette;
     $("#meetBtn").onclick = openMeetList;

@@ -73,9 +73,17 @@
     : p >= 0.9995 ? ["interpolate", ["linear"], ["line-progress"], 0, from, 1, to]
     : ["interpolate", ["linear"], ["line-progress"], 0, from, p, to === "#fff" ? "#fff" : mix(from, to, p), Math.min(0.9999, p + 0.0005), NONE, 1, NONE];
   const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+  let lastCoords = null;
+  // 이미 그린 경로를 다시 그리지 않고 화면만 맞춤 (모바일: 카드 → 자세히 보기로 시트가 올라올 때)
+  function fitRoute(pad = {}) {
+    if (!lastCoords || !map.getLayer("route-line")) return;
+    const b = lastCoords.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(lastCoords[0], lastCoords[0]));
+    map.fitBounds(b, { padding: { top: pad.top || 60, right: pad.right || 40, bottom: pad.bottom || 60, left: pad.left || 40 }, maxZoom: 18, duration: 500 });
+  }
   function showRoute(path, pad = {}) {
     clearRoute();
     const coords = path.map(([a, o]) => [o, a]);
+    lastCoords = coords;
     if (coords.length < 2) return;
     map.addSource("route", { type: "geojson", lineMetrics: true, data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } } });
     const L = { "line-cap": "round", "line-join": "round" };
@@ -119,5 +127,5 @@
     } catch { return []; }
   }
 
-  window.MapKit = { init, add, focus, zoom, home, setAdding, search, showRoute, clearRoute, attribution: "" };
+  window.MapKit = { init, add, focus, zoom, home, setAdding, search, showRoute, clearRoute, fitRoute, attribution: "" };
 })();
