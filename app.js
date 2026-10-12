@@ -28,8 +28,8 @@
   const MAX_PICKS = 3;
   // 대표 카테고리와 이모지 (핀·칩·썸네일에 같이 씀)
   // 등록할 때 고르는 큰 분류 (순서 = 칩 순서)
-  const CAT_EMOJI = { 한식: "🍚", 중식: "🥟", 일식: "🍣", 양식: "🍝", 브런치: "🥞", 동남아: "🍛", 분식: "🍢", 면: "🍜", 고기: "🥩", 카페: "☕", 기타: "🍴" };
-  const CAT_ALIAS = { 아시안: "동남아" };   // 예전 이름으로 저장된 가게도 새 분류로 보이게
+  const CAT_EMOJI = { 한식: "🍚", 중식: "🥟", 일식: "🍣", 양식: "🍝", 브런치: "🥞", 아시안: "🍛", 분식: "🍢", 면: "🍜", 고기: "🥩", 카페: "☕", 기타: "🍴" };
+  const CAT_ALIAS = { 동남아: "아시안" };   // 잠깐 "동남아"로 저장된 가게도 아시안으로 보이게
   const CATS = Object.keys(CAT_EMOJI);
   const catLabel = (c) => `${CAT_EMOJI[c] || "🍴"} ${c}`;
   function catFrom(raw, name = "") {
@@ -38,7 +38,7 @@
     if (/카페|커피|제과|베이커리|디저트|케이크|빵/.test(s)) return "카페";
     if (/라멘|라면|초밥|스시|일식|일본|돈까스|돈카츠|카츠|우동|소바|이자카야/.test(s)) return "일식";
     if (/중식|중국|짜장|짬뽕|마라|딤섬|훠궈|반점/.test(s)) return "중식";
-    if (/아시아|동남아|베트남|태국|타이|인도|쌀국수|커리|카레|분짜|팟타이|나시고랭/.test(s)) return "동남아";
+    if (/아시아|동남아|베트남|태국|타이|인도|쌀국수|커리|카레|분짜|팟타이|나시고랭/.test(s)) return "아시안";
     if (/양식|이탈리|파스타|피자|햄버거|버거|스테이크|멕시|패스트푸드/.test(s)) return "양식";
     if (/고기|구이|갈비|삼겹|곱창|육류|숯불|정육/.test(s)) return "고기";
     if (/국수|냉면|칼국수|막국수|수제비|면/.test(s)) return "면";
@@ -65,7 +65,7 @@
     store: null, user: null, places: [], reviews: [], meetups: [], pending: null,
     seenMeet: new Set(), meetInit: false, mf: null,
     filters: { solo: false, wait: false, cheap: false },
-    sort: "popular",   // 전체 목록 정렬: popular(인기 순) / rating(별점 높은 순) / near(가까운 순)
+    sort: "rating",   // 전체 목록 정렬: rating(별점 높은 순) / near(가까운 순) / price(낮은 가격 순)
     tab: "list", cats: [], sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
     rl: { want: [], avoid: [], off: new Set(), skipYesterday: true, includeWish: true, spinning: false },
@@ -118,12 +118,14 @@
   };
   const inCat = (x, cat) => (SPECIAL[cat] ? SPECIAL[cat].test(x.st) : (x.p.category || "기타") === cat);
   // 정렬: 인기(멤버가 다녀온 기록 수 + 가고 싶어요 수) → 별점 → 가까운 순으로 동점 처리
-  const SORTS = { popular: "인기 순", rating: "별점 높은 순", near: "가까운 순" };
+  const SORTS = { rating: "별점 높은 순", near: "가까운 순", price: "낮은 가격 순" };
   const byNear = (x, y) => x.st.walk - y.st.walk;
   const byRating = (x, y) => y.st.avg - x.st.avg || y.st.count - x.st.count || byNear(x, y);
   const pop = (st) => st.count * 2 + st.wish.length;   // 다녀온 기록이 가고 싶어요보다 2배 무게
   const byPopular = (x, y) => pop(y.st) - pop(x.st) || byRating(x, y);
-  const sorter = (k) => (k === "rating" ? byRating : k === "near" ? byNear : byPopular);
+  // 낮은 가격 순: 멤버가 낸 가장 싼 가격 기준, 가격 기록이 없는 곳은 맨 뒤 (같으면 가까운 순)
+  const byPrice = (x, y) => (x.st.minPrice || Infinity) - (y.st.minPrice || Infinity) || byNear(x, y);
+  const sorter = (k) => (k === "near" ? byNear : k === "price" ? byPrice : k === "popular" ? byPopular : byRating);
   function passes(st, p) {
     const f = state.filters;
     // 공통 필터(상단 칩): 고른 것 중 하나라도 맞으면 보여줌 — 지도 핀·추천·전체 목록에 똑같이 적용
@@ -469,12 +471,12 @@
       } else if (state.sort !== "near") {
         // 인기·별점 순은 카테고리 구분 없이 한 줄로 (순위가 잘 보이게)
         const list = [...base].sort(sortFn);
-        body2 = list.map((x, i) => rowHTML(x, (state.sort === "popular" ? pop(x.st) : x.st.count) ? i + 1 : 0)).join("");
+        body2 = list.map((x, i) => rowHTML(x, (state.sort === "price" ? x.st.minPrice : x.st.count) ? i + 1 : 0)).join("");
       } else {
         body2 = cats.map((c) => { const list = base.filter((x) => (x.p.category || "기타") === c).sort(sortFn);
           return `<div class="group-h">${catLabel(c)}<span class="n">${list.length}곳</span></div>` + list.map((x) => rowHTML(x)).join(""); }).join("");
       }
-      const sub = state.sort === "popular" ? "멤버가 많이 다녀오고 가고 싶어 하는 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
+      const sub = state.sort === "price" ? "멤버가 낸 가격이 낮은 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
       html = `<div class="section-h">${anyFilter() ? `${esc(filterLabel())} ` : "전체 "}${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${body2}`;
     } else {
       const mine = state.reviews.filter((r) => r.uid === state.user.uid).sort((a, b) => b.createdAt - a.createdAt);
@@ -1124,12 +1126,12 @@
   }
 
   function openMeetForm(placeId) {
-    state.mf = { placeId, cap: 3, note: "", q: "", sort: "popular" };
+    state.mf = { placeId, cap: 3, note: "", q: "", sort: "rating" };
     const render = () => {
       const f = state.mf, p = f.placeId ? placeById(f.placeId) : null;
       const near = state.places.map((x) => ({ p: x, st: stats(x), w: walkMin(x.lat, x.lng) }))
         .filter((x) => !f.q || x.p.name.replace(/\s/g, "").includes(f.q.replace(/\s/g, ""))).sort(sorter(f.sort)).slice(0, 8);
-      const why = (x) => f.sort === "popular" && x.st.count ? `${x.st.count}명 다녀옴 · ` : f.sort !== "near" && x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : "";
+      const why = (x) => f.sort === "price" && x.st.minPrice ? `${won(x.st.minPrice)}부터 · ` : f.sort === "rating" && x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : "";
       const s = showSheet(`
         ${head("약속 만들기", `<span>${targetDate() !== TODAY() ? `${nextWord()} 점심 약속으로 올라가요` : "오늘 ○○ 먹으실 분! 을 올려요"}</span>`)}
         <div class="field"><span class="flabel">어디서</span>
