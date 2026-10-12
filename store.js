@@ -60,7 +60,7 @@
       async addReview(d) { const r = await F.addDoc(F.collection(db, "reviews"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       deleteReview: (id) => F.deleteDoc(F.doc(db, "reviews", id)),
       // 멤버 사진: 원본 크기 사진은 photos 컬렉션에 따로 두고, 가게를 열 때만 불러옴 (앱이 무거워지지 않게)
-      addPhoto: (d) => F.addDoc(F.collection(db, "photos"), { ...d, createdAt: F.serverTimestamp() }),
+      async addPhoto(d) { const r = await F.addDoc(F.collection(db, "photos"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       async listPhotos(placeId) {
         const snap = await F.getDocs(F.query(F.collection(db, "photos"), F.where("placeId", "==", placeId)));
         return toArr(snap).sort((a, b) => b.createdAt - a.createdAt);
@@ -126,7 +126,7 @@
       async updatePlace(pid, patch) { const p = data.places.find((x) => x.id === pid); if (p) Object.assign(p, patch); save(); },
       async deletePlace(pid) { data.places = data.places.filter((p) => p.id !== pid); data.reviews = data.reviews.filter((r) => r.placeId !== pid); data.photos = data.photos.filter((x) => x.placeId !== pid); save(); },
       async addReview(d) { const i = id(); data.reviews.push({ id: i, ...d, createdAt: Date.now() }); save(); return i; },
-      async addPhoto(d) { data.photos.push({ id: id(), ...d, createdAt: Date.now() }); try { save(); } catch { data.photos.pop(); throw new Error("미리보기 저장 공간이 부족해요"); } },
+      async addPhoto(d) { const i = id(); data.photos.push({ id: i, ...d, createdAt: Date.now() }); try { save(); } catch { data.photos.pop(); throw new Error("미리보기 저장 공간이 부족해요"); } return i; },
       async listPhotos(pid) { return data.photos.filter((x) => x.placeId === pid).sort((a, b) => b.createdAt - a.createdAt); },
       async deletePhotosOf(field, value) { data.photos = data.photos.filter((x) => x[field] !== value); save(); },
       async deletePhoto(pid) { data.photos = data.photos.filter((x) => x.id !== pid); save(); },
