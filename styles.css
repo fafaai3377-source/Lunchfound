@@ -718,3 +718,8 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 /* 로고 = 사옥으로 지도 맞추기 버튼 */
 #brand { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .15s ease; }
 #brand:active { transform: scale(.96); }
+/* 아이폰: 16px보다 작은 입력칸을 누르면 화면이 확대돼서 16px로 */
+@media (max-width: 899px) {
+  .chips.sub .sub-in { font-size: 16px; width: 116px; }
+  button, .chip, .row, a { touch-action: manipulation; }
+}

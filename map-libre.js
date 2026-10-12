@@ -52,7 +52,7 @@
   }
   const focus = (lat, lng, offX = 0, offY = 0) => map.easeTo({ center: [lng, lat], offset: [offX, offY], duration: 450 });
   const zoom = (dir) => map.easeTo({ zoom: map.getZoom() + (dir > 0 ? 1 : -1), duration: 250 });
-  const home = () => map.easeTo({ center: [office.lng, office.lat], zoom: 16.5, duration: 600 });
+  const home = (offY = 0, instant) => map.easeTo({ center: [office.lng, office.lat], zoom: 16.5, offset: [0, offY], duration: instant ? 0 : 600 });   // jumpTo는 offset을 무시해서 easeTo(0초)
   const setAdding = (on) => (map.getCanvas().style.cursor = on ? "crosshair" : "");
 
   // 도보 경로: 흰 테두리 + 파란 선, 사옥에서부터 그려짐

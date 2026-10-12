@@ -262,6 +262,7 @@
       return;
     }
     state.mapReady = true;
+    homeView(true);   // 처음 열 때도 사옥이 보이는 영역 가운데
     if (MapKit.attribution) { const a = $("#attrib"); a.textContent = MapKit.attribution; a.hidden = false; }
     const el = document.createElement("div");
     el.className = "office";
@@ -451,6 +452,13 @@
     state.ghost = MapKit.add(g, lat, lng, "center");
     openPinForm(lat, lng);
   }
+  // 사옥을 "보이는 지도 영역" 가운데로: 모바일은 위 버튼줄과 아래 목록 사이 가운데
+  function homeView(instant) {
+    if (desk()) return MapKit.home(0, instant);
+    const top = ($("#filterbar")?.getBoundingClientRect().bottom || 100);
+    const pr = $("#panel")?.getBoundingClientRect(), bottom = pr ? Math.max(0, innerHeight - pr.top) : 0;
+    MapKit.home(Math.round((top - bottom) / 2), instant);
+  }
   function routePad() {
     return desk() ? { top: 90, right: 490, bottom: 50, left: 440 } : { top: 120, right: 50, bottom: Math.round(innerHeight * 0.55) + 20, left: 50 };
   }
@@ -603,7 +611,8 @@
     const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.memo ? ` · <span class="wish-memo">“${esc(r.memo)}”</span>` : ""}${r.uid === me ? ` <button class="link" data-edit="${esc(r.id)}">수정</button> <button class="link" data-del="${esc(r.id)}">취소</button>` : isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
     const canDelCover = img && isAdmin();   // 대표 사진 올리기·빼기는 관리자만 (멤버는 기록 사진이 자동으로 대표 사진이 됨)
     const hero = `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}
-        <div class="hero-cap">${img ? `<span class="hero-who">📷 ${img.by ? `${esc(img.by)}님 사진` : `${esc(img.from || "대표")} 사진`}</span>` : `<span class="hero-who">${isAdmin() ? "아직 대표 사진이 없어요" : "기록에 사진을 남기면 여기 보여요"}</span>`}
+        <div class="hero-cap">${img ? `<span class="hero-who">📷 ${img.by ? `${esc(img.by)}님 사진` : `${esc(img.from || "대표")} 사진`}</span>` : (() => { const r = state.reviews.filter((x) => x.placeId === p.id && x.thumb).sort((a, b) => b.createdAt - a.createdAt)[0];
+          return `<span class="hero-who">${r ? `📷 ${esc(r.userName || "멤버")}님 사진${r.menu ? ` · ${esc(r.menu)}` : ""}` : isAdmin() ? "아직 대표 사진이 없어요" : "기록에 사진을 남기면 여기 보여요"}</span>`; })()}
           <span class="hero-btns">${p.images?.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}${canDelCover ? `<button data-act="delcover">빼기</button>` : ""}${isAdmin() ? `<label class="hero-up"><input type="file" accept="image/*" hidden id="coverIn" />📷 ${img ? "사진 추가" : "대표 사진 올리기"}</label>` : ""}</span></div></div>`;
     const s = showSheet(`
       ${head(esc(p.name), `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
@@ -934,9 +943,13 @@
   }
 
   // ───────── 오늘 뭐 먹지? (룰렛) ─────────
+  // "어제" = 지난 평일 하루 (월요일이면 금요일). 오늘 몰아서 남긴 기록은 어제로 치지 않음
   function yesterdayCats() {
-    const since = Date.now() - 2 * 864e5;
-    return [...new Set(state.reviews.filter((r) => r.uid === state.user.uid && r.status === "visited" && r.createdAt >= since).map((r) => placeById(r.placeId)?.category).filter(Boolean))];
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    const end = d.getTime();
+    do d.setDate(d.getDate() - 1); while (d.getDay() === 0 || d.getDay() === 6);
+    const start = d.getTime();
+    return [...new Set(state.reviews.filter((r) => r.uid === state.user.uid && r.status === "visited" && r.createdAt >= start && r.createdAt < end).map((r) => placeById(r.placeId)?.category).filter(Boolean))];
   }
   // 룰렛 후보: 땡기는 것(전체 목록과 같은 칩, 혼밥·거지맵 포함) 안에서 → 먹기 싫은 것 빼고 → 체크된 곳만
   // "어제 먹은 종류 빼기"는 땡기는 것을 하나도 안 골랐을 때만 적용 (직접 고른 게 항상 우선)
@@ -946,11 +959,11 @@
   }
   function rlPool() {
     const rl = state.rl, yc = rl.skipYesterday && !rl.want.length ? yesterdayCats() : [];
-    return rlBase().filter((x) => {
-      if (rl.want.length && !rl.want.some((c) => inCat(x, c))) return false;
-      if (yc.includes(x.p.category || "기타")) return false;
-      return true;
-    }).sort(byRating);
+    const base = rlBase().filter((x) => !rl.want.length || rl.want.some((c) => inCat(x, c)));
+    const out = base.filter((x) => !yc.includes(x.p.category || "기타"));
+    // 어제 먹은 종류를 빼면 하나도 안 남을 때는 빼지 않음 (룰렛이 비어 버리지 않게)
+    rl.relaxed = yc.length > 0 && !out.length && base.length > 0;
+    return (rl.relaxed ? base : out).sort(byRating);
   }
   const candidates = () => rlPool().filter((x) => !state.rl.off.has(x.p.id));
   function openRoulette() {
@@ -974,9 +987,9 @@
         <div class="field"><span class="flabel">땡기는 것 <span class="opt">여러 개 선택 · 안 고르면 전체</span></span><div class="chips rl-cats">${wantChips}</div></div>
         <div class="field"><span class="flabel">먹기 싫은 것 <span class="opt">고르면 후보에서 빠져요</span></span><div class="chips neg rl-cats">${avoidChips}</div></div>
         <div class="field"><div class="rl-head"><span class="flabel" style="margin:0">돌릴 가게 <b>${list.length}</b> / ${pool.length}곳</span>${pool.length ? `<button class="link" data-rl-all>${allOn ? "모두 빼기" : "모두 넣기"}</button>` : ""}</div>
-          <div class="rl-list">${pool.length ? pool.map((x) => `<label class="rl-item"><input type="checkbox" data-rp="${esc(x.p.id)}" ${rl.off.has(x.p.id) ? "" : "checked"} />${thumbHTML(x.p, "thumb sm")}<span class="rl-nm">${esc(x.p.name)}<small>${x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : ""}${esc(x.p.category || "기타")} · 도보 ${x.st.walk}분</small></span></label>`).join("") : `<p class="empty" style="padding:6px 0">${ycOn ? `어제 먹은 종류(${ycAll.map(esc).join(", ")})를 빼서 남은 곳이 없어요. 아래 스위치를 꺼보세요.` : "조건에 맞는 가게가 없어요. 먹기 싫은 것을 조금 풀어보세요."}</p>`}</div></div>
+          <div class="rl-list">${pool.length ? pool.map((x) => `<label class="rl-item"><input type="checkbox" data-rp="${esc(x.p.id)}" ${rl.off.has(x.p.id) ? "" : "checked"} />${thumbHTML(x.p, "thumb sm")}<span class="rl-nm">${esc(x.p.name)}<small>${x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : ""}${esc(x.p.category || "기타")} · 도보 ${x.st.walk}분</small></span></label>`).join("") : `<p class="empty" style="padding:6px 0">${"조건에 맞는 가게가 없어요. 먹기 싫은 것을 조금 풀어보세요."}</p>`}</div></div>
         <div class="field list-card" style="background:var(--parchment);padding:0 12px">
-          <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${rl.want.length ? "땡기는 것을 고르면 적용 안 해요" : ycAll.length ? `최근 기록: ${ycAll.map(esc).join(", ")}` : "최근 이틀 내 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
+          <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${rl.want.length ? "땡기는 것을 고르면 적용 안 해요" : ycAll.length ? (rl.relaxed ? `어제 ${ycAll.map(esc).join(", ")} · 빼면 남는 곳이 없어 이번엔 포함` : `어제 기록: ${ycAll.map(esc).join(", ")}`) : "어제 남긴 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
           <div class="toggle-row" style="border-top:.5px solid var(--hair)"><span>아직 기록 없는 곳도 넣기<br><span style="font-size:13px;color:var(--ink-2)">가고 싶은 곳, 새로 등록된 곳 포함</span></span><button class="switch" role="switch" aria-checked="${rl.includeWish}" data-tg="includeWish" aria-label="가고 싶은 곳도 넣기"></button></div>
         </div>
         <div class="wheel" aria-hidden="true"><div class="wheel-band"></div><div class="wheel-track" id="track">${(list.length ? list : [{ p: { name: "후보가 없어요" } }]).slice(0, 5).map((x) => `<div class="wheel-item">${esc(x.p.name)}</div>`).join("")}</div></div>
@@ -1133,7 +1146,7 @@
       <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="mtNew">+ 약속 만들기</button></div>
       ${pushCard()}
       <div class="h3">${nextWord()} 점심 ${list.filter((m) => !mtPast(m)).length ? `${list.filter((m) => !mtPast(m)).length}건` : ""}</div>
-      ${list.length ? list.map(meetCard).join("") : `<p class="empty" style="padding:8px 0">아직 오늘 약속이 없어요. 먼저 "오늘 ○○ 먹으실 분!"을 올려보세요.</p>`}
+      ${list.length ? list.map(meetCard).join("") : `<p class="empty" style="padding:8px 0">아직 ${nextWord()} 약속이 없어요. 먼저 "${nextWord()} ○○ 먹으실 분!"을 올려보세요.</p>`}
     `, "meets");
     $("#mtNew", s).onclick = () => openMeetForm(null);
     bindPushCard(s, openMeetList);
@@ -1543,7 +1556,7 @@
     $("#scrim").onclick = closeSheet;
     $("#zin").onclick = () => MapKit.zoom(1);
     $("#zout").onclick = () => MapKit.zoom(-1);
-    $("#zhome").onclick = () => MapKit.home();
+    $("#zhome").onclick = () => homeView();
     // 앱 화면·지도는 스크롤되면 안 됨: 브라우저가 포커스 때문에 밀어도 즉시 제자리로 (overflow: clip 미지원 브라우저 대비)
     ["#app", "#map"].forEach((s) => { const el = $(s); el.addEventListener("scroll", () => { if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; } }); });
     // 지도를 움직이거나 휠로 확대하면 정보 카드 숨김
@@ -1565,11 +1578,15 @@
     setInterval(lunchTick, 60000); setTimeout(lunchTick, 4000);
     setTimeout(installTip, 25000);
     // 기본 가게 자동 등록은 하지 않음 (예전 버전이 목록을 다 받기 전에 "비어 있다"고 보고 다시 등록하던 문제)
+    // 미리보기 모드(이 브라우저에만 저장)만 기본 가게를 채워서 보여줌 — 실제 서비스에는 자동 등록 없음
+    if (state.store.demo && window.SEED_PLACES) seedPlaces(SEED_PLACES.filter(() => true));
+    let firstView = true;
     state.store.subscribe(({ places, reviews, meetups }) => {
       state.places = places.map((p) => (CAT_ALIAS[p.category] ? { ...p, category: CAT_ALIAS[p.category] } : p)); state.reviews = reviews;
       onMeetups(meetups || []);
       if (state.pending && places.some((p) => p.id === state.pending.id)) state.pending = null;
       renderAll();
+      if (firstView && state.mapReady) { firstView = false; setTimeout(() => homeView(true), 450); }   // 목록 패널이 자리 잡은 뒤(0.3초 애니메이션)
     });
   }
 
@@ -1597,7 +1614,7 @@
     $("#loginBrand").innerHTML = brand; $("#brand").setAttribute("aria-label", `${C.appTitle || n} · 사옥으로 지도 맞추기`);
     // 로고를 누르면: 보던 가게·카드를 닫고 사옥을 가운데로 지도 다시 맞춤
     const br = $("#brand"); br.setAttribute("role", "button"); br.tabIndex = 0;
-    br.onclick = () => { if (state.sheet === "place") closeSheet(); hideTip(); state.selected = null; MapKit.clearRoute?.(); state.routeFor = null; renderMarkers(); if (state.mapReady) MapKit.home(); };
+    br.onclick = () => { if (state.sheet === "place") closeSheet(); hideTip(); state.selected = null; MapKit.clearRoute?.(); state.routeFor = null; renderMarkers(); if (state.mapReady) homeView(); };
     br.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); br.onclick(); } };
     document.title = C.appTitle || n;
     initPress();
