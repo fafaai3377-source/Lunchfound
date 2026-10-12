@@ -127,9 +127,9 @@
   // 특별 카테고리 — 혼밥: 멤버 기록이 대부분 "혼자 OK" / 거지맵: 멤버가 만원 미만으로 먹은 기록이 있는 곳
   const SPECIAL = {
     "@solo": { label: "🍙 혼밥", test: (st) => st.solo === "ok" },
-    "@cheap": { label: "💸 거지맵", test: (st) => st.minPrice > 0 && st.minPrice < (C.cheapPrice || 10000) },
+    "@cheap": { label: "💸 거지맵", test: (st, p) => (p?.category || "") !== "카페" && st.minPrice > 0 && st.minPrice < (C.cheapPrice || 10000) },   // 카페는 밥이 아니라서 거지맵에서 제외
   };
-  const inCat = (x, cat) => (SPECIAL[cat] ? SPECIAL[cat].test(x.st) : (x.p.category || "기타") === cat);
+  const inCat = (x, cat) => (SPECIAL[cat] ? SPECIAL[cat].test(x.st, x.p) : (x.p.category || "기타") === cat);
   // 정렬: 인기(멤버가 다녀온 기록 수 + 가고 싶어요 수) → 별점 → 가까운 순으로 동점 처리
   const SORTS = { rating: "별점 높은 순", near: "가까운 순", price: "낮은 가격 순" };
   const byNear = (x, y) => x.st.walk - y.st.walk;
@@ -496,7 +496,7 @@
     if (st.wait) meta.push(`<span>웨이팅 ${WAIT_S[st.wait]}</span>`);
     if (st.count && st.wish.length) meta.push(`<span>♡ ${st.wish.length}</span>`);   // 기록 없는 곳은 앞에 "가고 싶은 멤버 N"이 이미 있음
     if (st.solo === "ok") meta.push(`<span>혼밥 OK</span>`);
-    if (st.minPrice) meta.push(`<span>${st.minPrice < (C.cheapPrice || 10000) ? "💸 " : ""}${won(st.minPrice)}부터</span>`);
+    if (st.minPrice) meta.push(`<span>${st.minPrice < (C.cheapPrice || 10000) && p.category !== "카페" ? "💸 " : ""}${won(st.minPrice)}부터</span>`);
     return `<button class="row" data-place="${esc(p.id)}">${rank ? `<span class="rank">${rank}</span>` : ""}${thumbHTML(p)}
       <div class="row-main"><div class="row-name">${esc(p.name)}</div><div class="row-meta">${meta.join("")}</div></div>
       <span class="row-side"><span class="row-walk">도보 ${st.walk}분</span>${heartHTML(p.id)}</span></button>`;
@@ -1051,7 +1051,8 @@
   // "어제 먹은 종류 빼기"는 땡기는 것을 하나도 안 골랐을 때만 적용 (직접 고른 게 항상 우선)
   function rlBase() {
     const rl = state.rl;
-    return state.places.map((p) => ({ p, st: stats(p) })).filter((x) => (x.st.count || rl.includeWish) && !rl.avoid.includes(x.p.category || "기타"));
+    // 오늘 뭐 먹지는 점심 밥집만 — 카페는 후보에서 제외
+    return state.places.filter((p) => p.category !== "카페").map((p) => ({ p, st: stats(p) })).filter((x) => (x.st.count || rl.includeWish) && !rl.avoid.includes(x.p.category || "기타"));
   }
   function rlPool() {
     const rl = state.rl, yc = rl.skipYesterday && !rl.want.length ? yesterdayCats() : [];
@@ -1071,7 +1072,7 @@
       const prevScroll = state.sheet === "roulette" ? $("#sheet").scrollTop : 0;
       const pool = rlPool(), list = pool.filter((x) => !rl.off.has(x.p.id));
       const base = rlBase(), cnt = (c) => base.filter((x) => inCat(x, c)).length;
-      const used = CATS.filter((c) => state.places.some((p) => (p.category || "기타") === c));
+      const used = CATS.filter((c) => c !== "카페" && state.places.some((p) => (p.category || "기타") === c));
       const wantChips = [`<button class="chip" data-want="" aria-pressed="${!rl.want.length}">전체<span class="n">${base.length}</span></button>`,
         ...Object.keys(SPECIAL).map((c) => `<button class="chip special" data-want="${c}" aria-pressed="${rl.want.includes(c)}">${SPECIAL[c].label}<span class="n">${cnt(c)}</span></button>`),
         ...used.filter((c) => !rl.avoid.includes(c)).map((c) => `<button class="chip" data-want="${c}" aria-pressed="${rl.want.includes(c)}">${catLabel(c)}<span class="n">${cnt(c)}</span></button>`)].join("");
