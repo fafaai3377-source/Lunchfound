@@ -127,21 +127,45 @@
     } catch { return []; }
   }
 
-  // 주소 → 좌표 (OpenStreetMap, 키 없음). 도로명 주소가 가장 잘 맞고, 건물 번호까지 맞으면 exact
-  async function geocode(addr) {
+  // 주소 → 좌표 (OpenStreetMap, 키 없음)
+  // 네이버·카카오에서 복사한 주소("서울 마포구 와우산로29가길 4 1층 (서교동)")에서 도로명+건물번호만 뽑아 찾고,
+  // 도로명이 같은 결과만 인정 — 엉뚱한 곳으로 튀지 않게. 결과: { lat, lng, exact, label } 또는 null
+  function parseAddr(raw) {
+    const s = String(raw).replace(/\([^)]*\)/g, " ").replace(/[,·]/g, " ")
+      .replace(/(지하\s*)?\d+\s*층|B\d+|\d+\s*호|\d+\s*번지?\s*$/gi, " ").replace(/\s+/g, " ").trim();
+    const road = s.match(/([가-힣A-Za-z0-9]+(?:로|길))\s*(\d+(?:-\d+)?)/);
+    if (road) return { road: road[1], num: road[2], text: `${road[1]} ${road[2]}` };
+    const lot = s.match(/([가-힣]+동)\s*(\d+(?:-\d+)?)/);
+    if (lot) return { dong: lot[1], num: lot[2], text: `${lot[1]} ${lot[2]}` };
+    return { text: s };
+  }
+  const distM = (lat, lng) => { const R = 6371000, r = (x) => (x * Math.PI) / 180, a = Math.sin(r(lat - office.lat) / 2) ** 2 + Math.cos(r(office.lat)) * Math.cos(r(lat)) * Math.sin(r(lng - office.lng) / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(a)); };
+  async function nom(params) {
     const d = 0.03, vb = [office.lng - d, office.lat + d, office.lng + d, office.lat - d].join(",");
-    const num = (addr.match(/(\d+(?:-\d+)?)\s*$/) || [])[1] || "";
-    const tries = [addr, ...(/서울/.test(addr) ? [] : [`서울 ${addr}`]), addr.replace(/\s*\d+(-\d+)?\s*$/, "")].filter((x, i, a) => x && a.indexOf(x) === i);
-    for (const q of tries) {
-      try {
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&accept-language=ko&countrycodes=kr&limit=5&viewbox=${vb}&q=${encodeURIComponent(q)}`);
-        const j = await r.json();
-        if (!j.length) continue;
-        const hit = j.find((x) => num && x.address?.house_number === num) || j[0];
-        const a = hit.address || {};
-        return { lat: +hit.lat, lng: +hit.lon, exact: !!num && a.house_number === num,
-          label: [a.road || a.quarter || a.suburb, a.house_number].filter(Boolean).join(" ") || String(hit.display_name).split(",").slice(0, 2).join(" ") };
-      } catch {}
+    const q = new URLSearchParams({ format: "jsonv2", addressdetails: "1", "accept-language": "ko", countrycodes: "kr", limit: "10", viewbox: vb, ...params });
+    try { const r = await fetch(`https://nominatim.openstreetmap.org/search?${q}`); return (await r.json()).filter((x) => distM(+x.lat, +x.lon) < 3000); } catch { return []; }
+  }
+  async function geocode(raw) {
+    const a = parseAddr(raw);
+    const pick = (x, exact) => ({ lat: +x.lat, lng: +x.lon, exact, label: [x.address?.road, x.address?.house_number].filter(Boolean).join(" ") || a.text });
+    if (a.road) {
+      let list = await nom({ street: `${a.num} ${a.road}`, city: "서울" });
+      if (!list.length) list = await nom({ q: `서울 ${a.road} ${a.num}` });
+      const same = list.filter((x) => (x.address?.road || "").replace(/\s/g, "") === a.road);
+      const hit = same.find((x) => x.address?.house_number === a.num);
+      if (hit) return pick(hit, true);
+      // 본번이 같은 바로 옆 건물(예: 32 → 32-15)까지만 "근처"로 인정
+      const main = a.num.split("-")[0];
+      const near = same.find((x) => String(x.address?.house_number || "").split("-")[0] === main);
+      if (near) return pick(near, false);
+      // 그 밖엔 자동으로 찍지 않음 — 길 위치만 알려줘서 지도를 그 근처로 옮겨주는 용도
+      const roadPt = same[0] || (await nom({ street: a.road, city: "서울" })).find((x) => (x.address?.road || "").replace(/\s/g, "") === a.road);
+      return roadPt ? { roadOnly: true, lat: +roadPt.lat, lng: +roadPt.lon, label: a.road } : null;
+    }
+    if (a.dong) {   // 지번 주소: 지도 데이터에 거의 없음 → 정확히 맞을 때만
+      const list = await nom({ q: `서울 ${a.text}` });
+      const hit = list.find((x) => x.address?.house_number === a.num);
+      return hit ? pick(hit, true) : null;
     }
     return null;
   }

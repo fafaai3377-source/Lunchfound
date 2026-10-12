@@ -841,19 +841,19 @@
   }
   // ───────── 장소 추가: 주소로 찾기 → 지도에 핀 → 위치 확인 후 저장 ─────────
   function openAddrForm(nameHint = "") {
-    let addr = "", busy = false, msg = "";
+    let addr = "", busy = false, msg = "", hint = null;
     const render = () => {
       const s = showSheet(`
         ${head("주소로 등록", "<span>도로명 주소가 가장 정확해요</span>")}
-        <div class="field"><label class="flabel" for="addrQ">가게 주소</label><input class="input" id="addrQ" placeholder="예: 동교로 194, 와우산로29가길 4" value="${esc(addr)}" autocomplete="off" enterkeyhint="search" /><p class="err" id="aerr">${msg}</p></div>
+        <div class="field"><label class="flabel" for="addrQ">가게 주소</label><input class="input" id="addrQ" placeholder="예: 동교로 194, 와우산로29가길 4" value="${esc(addr)}" autocomplete="off" enterkeyhint="search" /><p class="err" id="aerr" style="line-height:1.5">${msg}</p></div>
         <div class="stack"><button class="btn btn-primary btn-block" id="addrGo" ${busy ? "disabled" : ""}>${busy ? "찾는 중…" : "지도에서 위치 찾기"}</button>
-          ${msg ? `<button class="btn btn-plain btn-block" id="addrPin">이 주소로 지도에서 직접 찍기</button>` : ""}</div>
+          ${msg ? `<button class="btn btn-secondary btn-block" id="addrPin">${hint ? `${esc(hint.label)} 근처에서 직접 찍기` : "이 주소로 지도에서 직접 찍기"}</button>` : ""}</div>
         <p class="hint">네이버·카카오 지도에서 가게를 찾아 <b>도로명 주소</b>를 복사해 붙여넣으면 편해요. 찾은 뒤 위치가 조금 다르면 지도를 눌러 옮길 수 있어요.</p>
       `, "add");
       const i = $("#addrQ", s); i.oninput = () => (addr = i.value);
       i.onkeydown = (e) => { if (e.key === "Enter") go(); };
       $("#addrGo", s).onclick = go;
-      const ap = $("#addrPin", s); if (ap) ap.onclick = () => { state.form = { pinDraft: true, name: nameHint, category: "", note: "", address: addr.trim() }; startPinMode(); toast("가게 위치를 지도에서 눌러주세요"); };
+      const ap = $("#addrPin", s); if (ap) ap.onclick = () => { state.form = { pinDraft: true, name: nameHint, category: "", note: "", address: addr.trim().replace(/\s+/g, " ") }; startPinMode(); if (hint) MapKit.focus(hint.lat, hint.lng, 0, 0); toast("가게 위치를 지도에서 눌러주세요"); };
       if (!addr) setTimeout(() => i.focus(), 60);
     };
     const go = async () => {
@@ -862,9 +862,10 @@
       busy = true; msg = ""; render();
       const r = await MapKit.geocode?.(addr.trim());
       busy = false;
-      if (!r) { msg = "이 주소를 지도에서 찾지 못했어요. 도로명 주소(예: 동교로 194)로 다시 적거나, 지도에서 직접 찍어주세요."; return render(); }
+      hint = r?.roadOnly ? r : null;
+      if (!r || r.roadOnly) { msg = r?.roadOnly ? `지도 데이터에 이 건물 번호가 없어서 정확한 위치를 못 찾았어요. 아래 버튼을 누르면 ${esc(r.label)} 근처로 지도를 옮겨드릴게요. 가게 위치를 직접 눌러주세요.` : "이 주소를 지도에서 찾지 못했어요. 지번(○○동 123-4) 말고 도로명 주소(예: 동교로 194)로 넣거나, 지도에서 직접 찍어주세요."; return render(); }
       if (walkMin(r.lat, r.lng, true) > 40) { msg = "찾은 위치가 사옥에서 너무 멀어요. 주소를 다시 확인하거나 지도에서 직접 찍어주세요."; return render(); }
-      state.form = { pinDraft: true, name: nameHint, category: "", note: "", address: addr.trim(), approx: !r.exact };
+      state.form = { pinDraft: true, name: nameHint, category: "", note: "", address: addr.trim().replace(/\s+/g, " "), approx: !r.exact, found: r.label };
       startPinMode();
       placeGhost(r.lat, r.lng);
       // 모바일: 찾은 위치가 아래 입력창에 가리지 않게, 위 버튼줄과 입력창 사이 가운데로
@@ -884,7 +885,7 @@
   function openPinForm(lat, lng) {
     // 이름·종류·주소를 적다가 지도를 다시 눌러 위치를 옮겨도 적은 내용은 그대로
     const prev = state.form?.pinDraft ? state.form : {};
-    state.form = { pinDraft: true, name: prev.name || "", category: prev.category || "", note: prev.note || "", address: prev.address || "", addrAuto: !!prev.addrAuto, approx: !!prev.approx && prev.lat == null, lat, lng };
+    state.form = { pinDraft: true, name: prev.name || "", category: prev.category || "", note: prev.note || "", address: prev.address || "", addrAuto: !!prev.addrAuto, approx: !!prev.approx && prev.lat == null, found: prev.lat == null ? prev.found || "" : "", lat, lng };
     // 지도에서 찍은 곳: 주소칸이 비었거나 자동으로 채운 값이면, 찍은 위치의 도로명 주소로 채움 (직접 적은 주소는 그대로)
     if ((!state.form.address || state.form.addrAuto) && MapKit.reverse) {
       const f0 = state.form;
@@ -898,7 +899,7 @@
       const f = state.form;
       const s = showSheet(`
         ${head("새 장소", `<b>사옥에서 도보 ${walkMin(lat, lng)}분</b><span>위치가 다르면 지도를 다시 눌러주세요</span>`)}
-        ${f.approx ? `<p class="addr-warn">📍 주소의 정확한 건물은 못 찾아서 <b>근처 길</b>에 찍었어요. 지도를 눌러 가게 위치로 옮겨주세요.</p>` : ""}
+        ${f.approx ? `<p class="addr-warn">📍 지도 데이터에 이 건물 번호가 없어서 <b>같은 길 가까운 곳(${esc(f.found || "")})</b>에 찍었어요. 네이버·카카오 지도와 비교해서 지도를 눌러 가게 위치로 옮겨주세요.</p>` : f.found ? `<p class="addr-ok">📍 ${esc(f.found)} 위치로 찍었어요</p>` : ""}
         <div class="field"><label class="flabel" for="pname">가게 이름</label><input class="input" id="pname" maxlength="30" placeholder="간판에 적힌 이름 그대로" value="${esc(f.name)}" autocomplete="off" /><p class="err" id="perr"></p></div>
         <div class="field"><span class="flabel">종류</span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
         <div class="field"><label class="flabel" for="paddr">주소 <span class="opt">찍은 위치로 자동 입력 · 고쳐도 돼요</span></label><input class="input" id="paddr" maxlength="60" placeholder="예: 동교로 194" value="${esc(f.address)}" autocomplete="off" /></div>

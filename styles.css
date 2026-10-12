@@ -754,3 +754,4 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .addr-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 /* 모바일 새 장소 입력창: 찍은 위치가 보이도록 화면의 60%까지만, 나머지는 스크롤 */
 @media (max-width: 899px) { .sheet[data-kind="pin"] { max-height: 60vh; overflow-y: auto; } }
+.addr-ok { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint, rgba(0,122,255,.1)); color: var(--accent); font-size: 13px; font-weight: 600; }
