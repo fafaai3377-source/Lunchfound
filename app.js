@@ -62,7 +62,7 @@
     store: null, user: null, places: [], reviews: [], meetups: [], pending: null,
     seenMeet: new Set(), meetInit: false, mf: null,
     filters: { solo: false, wait: false, cheap: false },
-    sort: "popular",   // 전체 목록 정렬: popular(지난주 인기) / rating(별점 높은 순) / near(가까운 순)
+    sort: "popular",   // 전체 목록 정렬: popular(인기 순) / rating(별점 높은 순) / near(가까운 순)
     tab: "top", cats: [], sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
     rl: { cats: [], off: new Set(), skipYesterday: true, includeWish: true, spinning: false },
@@ -109,11 +109,12 @@
     "@cheap": { label: "💸 거지맵", test: (st) => st.minPrice > 0 && st.minPrice < (C.cheapPrice || 10000) },
   };
   const inCat = (x, cat) => (SPECIAL[cat] ? SPECIAL[cat].test(x.st) : (x.p.category || "기타") === cat);
-  // 정렬: 지난주 인기 → 별점 → 가까운 순으로 동점 처리
-  const SORTS = { popular: "지난주 인기", rating: "별점 높은 순", near: "가까운 순" };
+  // 정렬: 인기(멤버가 다녀온 기록 수 + 가고 싶어요 수) → 별점 → 가까운 순으로 동점 처리
+  const SORTS = { popular: "인기 순", rating: "별점 높은 순", near: "가까운 순" };
   const byNear = (x, y) => x.st.walk - y.st.walk;
   const byRating = (x, y) => y.st.avg - x.st.avg || y.st.count - x.st.count || byNear(x, y);
-  const byPopular = (x, y) => y.st.week - x.st.week || y.st.count - x.st.count || byRating(x, y);
+  const pop = (st) => st.count * 2 + st.wish.length;   // 다녀온 기록이 가고 싶어요보다 2배 무게
+  const byPopular = (x, y) => pop(y.st) - pop(x.st) || byRating(x, y);
   const sorter = (k) => (k === "rating" ? byRating : k === "near" ? byNear : byPopular);
   function passes(st, p) {
     const f = state.filters;
@@ -435,7 +436,7 @@
     meta.push(st.count ? `<span class="rate"><i>★</i> ${st.avg.toFixed(1)} <span style="color:var(--ink-2);font-weight:400">(${st.count})</span></span>` : st.wish.length ? `<span>♡ 가고 싶은 멤버 ${st.wish.length}</span>` : `<span>아직 기록 없음</span>`);
     meta.push(`<span>${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}</span>`);
     if (st.wait) meta.push(`<span>웨이팅 ${WAIT_S[st.wait]}</span>`);
-    if (st.week) meta.push(`<span>지난주 ${st.week}번</span>`);
+    if (st.wish.length) meta.push(`<span>♡ ${st.wish.length}</span>`);
     if (st.solo === "ok") meta.push(`<span>혼밥 OK</span>`);
     if (st.minPrice) meta.push(`<span>${st.minPrice < (C.cheapPrice || 10000) ? "💸 " : ""}${won(st.minPrice)}부터</span>`);
     return `<button class="row" data-place="${esc(p.id)}">${rank ? `<span class="rank">${rank}</span>` : ""}${thumbHTML(p)}
@@ -450,7 +451,7 @@
       html = `<div class="section-h">오늘의 추천</div><div class="section-sub">멤버 별점이 높은 순${anyFilter() ? " · 필터 적용" : ""}</div>` +
         (top.length ? top.map((x, i) => rowHTML(x, i + 1)).join("") : `<p class="empty">${anyFilter() ? "조건에 맞는 곳이 없어요. 필터를 하나 꺼보세요." : "아직 별점이 남은 곳이 없어요. 오늘 먹은 곳부터 남겨보세요."}</p>`);
     } else if (state.tab === "list") {
-      // 정렬(지난주 인기 / 별점 / 가까운 순) + 카테고리 칩(혼밥·거지맵 포함) / 전체일 때는 카테고리별로 묶어서
+      // 정렬(인기 / 별점 / 가까운 순) + 카테고리 칩(혼밥·거지맵 포함) / 전체일 때는 카테고리별로 묶어서
       const base = all.filter((x) => passes(x.st, x.p));
       const cats = CATS.filter((c) => base.some((x) => (x.p.category || "기타") === c));
       const sortFn = sorter(state.sort);
@@ -461,12 +462,12 @@
       } else if (state.sort !== "near") {
         // 인기·별점 순은 카테고리 구분 없이 한 줄로 (순위가 잘 보이게)
         const list = [...base].sort(sortFn);
-        body2 = list.map((x, i) => rowHTML(x, (state.sort === "popular" ? x.st.week : x.st.count) ? i + 1 : 0)).join("");
+        body2 = list.map((x, i) => rowHTML(x, (state.sort === "popular" ? pop(x.st) : x.st.count) ? i + 1 : 0)).join("");
       } else {
         body2 = cats.map((c) => { const list = base.filter((x) => (x.p.category || "기타") === c).sort(sortFn);
           return `<div class="group-h">${catLabel(c)}<span class="n">${list.length}곳</span></div>` + list.map((x) => rowHTML(x)).join(""); }).join("");
       }
-      const sub = state.sort === "popular" ? "지난 7일 동안 멤버가 많이 다녀온 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
+      const sub = state.sort === "popular" ? "멤버가 많이 다녀오고 가고 싶어 하는 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
       html = `<div class="section-h">${anyFilter() ? `${esc(filterLabel())} ` : "전체 "}${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${body2}`;
     } else {
       const mine = state.reviews.filter((r) => r.uid === state.user.uid).sort((a, b) => b.createdAt - a.createdAt);
@@ -1051,7 +1052,7 @@
       const f = state.mf, p = f.placeId ? placeById(f.placeId) : null;
       const near = state.places.map((x) => ({ p: x, st: stats(x), w: walkMin(x.lat, x.lng) }))
         .filter((x) => !f.q || x.p.name.replace(/\s/g, "").includes(f.q.replace(/\s/g, ""))).sort(sorter(f.sort)).slice(0, 8);
-      const why = (x) => f.sort === "popular" && x.st.week ? `지난주 ${x.st.week}번 · ` : f.sort !== "near" && x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : "";
+      const why = (x) => f.sort === "popular" && x.st.count ? `${x.st.count}명 다녀옴 · ` : f.sort !== "near" && x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : "";
       const s = showSheet(`
         ${head("약속 만들기", `<span>${targetDate() !== TODAY() ? `${nextWord()} 점심 약속으로 올라가요` : "오늘 ○○ 먹으실 분! 을 올려요"}</span>`)}
         <div class="field"><span class="flabel">어디서</span>
@@ -1440,7 +1441,7 @@
     state.store.subscribe(({ places, reviews, meetups }) => {
       state.places = places; state.reviews = reviews;
       onMeetups(meetups || []);
-      if (!seeded && window.SEED_PLACES) {
+      if (!seeded && window.SEED_PLACES && C.autoSeed) {
         seeded = true;
         const missing = SEED_PLACES.filter((s) => !places.some((p) => p.id === s.id || p.name === s.name));
         if (missing.length && !places.some((p) => String(p.id).startsWith("seed-"))) seedPlaces(missing);

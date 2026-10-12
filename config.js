@@ -37,6 +37,8 @@ window.CONFIG = {
   // 대표 이미지 서버 함수 (api/place-image.js). Vercel 환경변수 KAKAO_REST_KEY 필요
   // 블로그 사진 자동 찾기는 쓰지 않아요 (카카오 키 없이 운영). 대표 사진은 멤버가 직접 올려요
   imageApi: "",
+  // 처음 실행 때 기본 가게(seeds.js)를 자동 등록할지. 실제 운영은 멤버가 등록한 곳만 쓰므로 꺼둠
+  autoSeed: false,
 
   cheapPrice: 10000, // "1만원 이하" 기준
 
