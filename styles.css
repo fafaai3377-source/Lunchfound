@@ -27,7 +27,7 @@
 :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
-html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); background: var(--parchment); }
 body { font-family: var(--font); color: var(--ink); background: var(--parchment); font-size: 17px; line-height: 1.47; letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; word-break: keep-all; -webkit-tap-highlight-color: transparent; }
 button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 input { font: inherit; color: inherit; }
@@ -550,3 +550,37 @@ input { font: inherit; color: inherit; }
 .lightbox button { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: 14px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 16px; }
 @keyframes fadeIn { from { opacity: 0; } }
 .hero-who { font-size: 12px; font-weight: 600; color: #fff; background: rgba(0,0,0,.45); padding: 4px 10px; border-radius: 999px; }
+
+/* ───────── 핀 카드 (눌러서 고정) ───────── */
+.tip.pinned { pointer-events: auto; width: 260px; padding: 0 0 10px; overflow: hidden; }
+.tip.pinned .tip-h, .tip.pinned .tip-r, .tip.pinned .tip-foot { margin-left: 14px; margin-right: 14px; }
+.tip.pinned .tip-h { margin-top: 12px; }
+.tip-photo { height: 116px; margin: 0 0 2px; overflow: hidden; background: var(--fill); }
+.tip:not(.pinned) .tip-photo { margin: -12px -14px 8px; height: 96px; border-radius: 14px 14px 0 0; }
+.tip-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tip-act { display: flex; justify-content: flex-end; margin: 8px 10px 0; }
+.tip-more { min-height: 34px; padding: 0 14px; border-radius: 9999px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; }
+.tip-more:active { background: var(--accent-press); }
+
+/* ───────── 휴대폰: 지도에 집중할 때 목록을 손잡이만 남기고 내림 ───────── */
+.app.panel-min { --peek: calc(34px + env(safe-area-inset-bottom, 0px)); }
+.app.panel-min .panel .seg, .app.panel-min .panel-body { opacity: 0; pointer-events: none; }
+.panel .seg, .panel-body { transition: opacity .2s ease; }
+.fab, .mapctl, .attrib { transition: bottom .3s cubic-bezier(.2,.8,.2,1); }
+@media (max-width: 899px) {
+  .sheet[data-kind="place"] { max-height: 72vh; }
+}
+
+/* ───────── 룰렛: 카테고리 + 가게 체크 ───────── */
+.rl-cats { flex-wrap: wrap; }
+.rl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.rl-list { max-height: 240px; overflow-y: auto; border-radius: var(--r-md); background: var(--parchment); padding: 4px 10px; }
+.rl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: .5px solid var(--hair); cursor: pointer; }
+.rl-item:last-child { border-bottom: 0; }
+.rl-item input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; margin: 0; }
+.rl-item .thumb.sm { width: 36px; height: 36px; border-radius: 9px; flex: none; position: relative; overflow: hidden; }
+.rl-item .thumb.sm .ph { font-size: 18px; }
+.rl-item .thumb.sm img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rl-nm { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; display: flex; flex-direction: column; }
+.rl-nm small { font-size: 12px; font-weight: 400; color: var(--ink-3); }
+.rl-item:has(input:not(:checked)) .rl-nm, .rl-item:has(input:not(:checked)) .thumb { opacity: .45; }

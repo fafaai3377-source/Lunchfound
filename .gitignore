@@ -1,0 +1,8 @@
+node_modules/
+# 절대 올리면 안 되는 것: Firebase 서비스 계정 키, 환경변수 파일
+*service-account*.json
+*firebase-adminsdk*.json
+.env
+.env.*
+.vercel/
+.DS_Store

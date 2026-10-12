@@ -21,6 +21,8 @@ window.CONFIG = {
 
   // 로그인: 멤버 이름 + 공용 비밀번호 (확인은 서버 함수 api/login.js, 비밀번호 해시는 Vercel 환경변수)
   loginApi: "/api/login",
+  // 앱을 닫아도 오는 알림(Web Push) 공개 키. 짝이 되는 비밀 키는 Vercel 환경변수 VAPID_PRIVATE_KEY에만 있어요
+  vapidPublicKey: "BKpyQTRXsKhY8KMNOvf2j-LFqtmGMCBGt3s52CaWWHl_BEl6U2qkbhg5RVzsTNexckZpVGYEM7_8B0FiqmyU0KQ",
 
   // Firebase 웹 앱 설정값. apiKey가 비어 있으면 미리보기 모드(이 브라우저에만 저장)
   firebase: {

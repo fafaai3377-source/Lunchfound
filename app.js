@@ -62,7 +62,7 @@
     sort: "popular",   // 전체 목록 정렬: popular(지난주 인기) / rating(별점 높은 순) / near(가까운 순)
     tab: "top", cat: "", sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
-    rl: { want: [], avoid: [], skipYesterday: true, includeWish: true, spinning: false },
+    rl: { cats: [], off: new Set(), skipYesterday: true, includeWish: true, spinning: false },
   };
 
   // ───────── 계산 ─────────
@@ -221,13 +221,27 @@
     mapEl.addEventListener("pointerup", (e) => {
       if (!down) return;
       const d = down; down = null;
+      // 누를 때 잡은 핀 기준 (실시간 지도는 누르는 동안 핀을 잠깐 클릭 불가로 바꿔서, 뗄 때 다시 찾으면 못 찾음)
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8 || state.adding) return;
-      const pin = pinAt(e.clientX, e.clientY);
-      if (pin && pin.dataset.pid === d.id) { hideTip(); openPlace(d.id); }
+      // 뒤따라오는 click이 방금 열린 시트의 바깥 배경에 닿아 바로 닫히지 않게, 0.5초 안의 click 한 번은 무시
+      const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      document.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => document.removeEventListener("click", swallow, true), 500);
+      lastPinTap = Date.now();
+      const p = placeById(d.id), pin = state.markers.get(d.id) && document.querySelector(`.pin[data-pid="${CSS.escape(d.id)}"]`);
+      if (p && pin) { collapsePanel(true); showTip(p, pin, true); } else openPlace(d.id);
     }, true);
     renderMarkers();
   }
 
+  let lastPinTap = 0;
+  // 휴대폰: 지도에 집중할 때 아래 목록을 손잡이만 남기고 내림 (손잡이·탭을 누르면 다시 올라옴)
+  function collapsePanel(on) {
+    if (desk()) return;
+    const app = $("#app"), panel = $("#panel");
+    app.classList.toggle("panel-min", on);
+    if (on) panel.dataset.open = "false";
+  }
   const popped = new Set();
   function renderMarkers() {
     if (!state.mapReady) return;
@@ -242,8 +256,8 @@
       el.innerHTML = `<div class="pin-b"><span class="pin-e">${emojiFor(p)}</span>${label}</div><div class="pin-t"></div><div class="pin-l">${esc(p.name)}</div>`;
       if (!popped.has(p.id)) { popped.add(p.id); el.classList.add("pop"); el.style.setProperty("--d", `${Math.min(order++ * 35, 700)}ms`); }
       el.dataset.pid = p.id;   // 클릭은 initMap의 pinTap에서 처리 (PC 마우스에서도 확실히 열리게)
-      el.addEventListener("mouseenter", () => showTip(p, el));
-      el.addEventListener("mouseleave", hideTip);
+      el.addEventListener("mouseenter", () => { if (!tipPinned) showTip(p, el); });
+      el.addEventListener("mouseleave", () => { if (!tipPinned) hideTip(); });
       const m = MapKit.add(el, p.lat, p.lng, "bottom");
       if (state.selected === p.id) m.front?.(true);
       state.markers.set(p.id, m);
@@ -252,21 +266,28 @@
 
   // ───────── 마우스 올리면 뜨는 정보 카드 (메뉴 · 도보 시간 · 카테고리) ─────────
   const canHover = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
-  let tipShownAt = 0;
+  let tipShownAt = 0, tipPinned = null;
   function topMenu(p, st) {
     const c = {};
     st.visited.filter((r) => r.menu).forEach((r) => { const k = r.menu.trim(); c[k] = (c[k] || 0) + 1 + (r.rating || 0) / 10; });
     return Object.entries(c).sort((x, y) => y[1] - x[1])[0]?.[0] || p.note || "";
   }
-  function showTip(p, el) {
-    if (!canHover() || state.adding) return;
+  // pinned=true: 핀을 눌렀을 때 고정되는 카드 (휴대폰·PC 공통) — 오른쪽 아래 "자세히 보기"
+  // pinned=false: PC에서 마우스만 올렸을 때 잠깐 보이는 미리보기
+  function showTip(p, el, pinned = false) {
+    if ((!pinned && !canHover()) || state.adding) return;
     const st = stats(p), wi = walkInfo(p.lat, p.lng), menu = topMenu(p, st), tip = $("#tip");
     const dist = wi.m ? ` · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}` : "";
-    tip.innerHTML = `<div class="tip-h">${emojiFor(p)} <b>${esc(p.name)}</b></div>
+    const photo = memberThumb(p) || curImage(p)?.image || "";
+    tipPinned = pinned ? p.id : null;
+    tip.classList.toggle("pinned", pinned);
+    tip.innerHTML = `${photo ? `<div class="tip-photo"><img src="${esc(photo)}" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.remove()" /></div>` : ""}<div class="tip-h">${emojiFor(p)} <b>${esc(p.name)}</b></div>
       <div class="tip-r"><span>카테고리</span><b>${esc(p.category || "기타")}</b></div>
       <div class="tip-r"><span>대표 메뉴</span><b>${menu ? esc(menu) : "아직 기록 없음"}</b></div>
       <div class="tip-r"><span>사옥에서</span><b>걸어서 ${wi.min}분${dist}</b></div>
-      ${st.count ? `<div class="tip-r"><span>멤버 별점</span><b><i class="star">★</i> ${st.avg.toFixed(1)} (${st.count})${st.wait ? ` · 웨이팅 ${WAIT_S[st.wait]}` : ""}${st.price ? ` · ${won(st.price)}` : ""}</b></div>` : `<div class="tip-foot">아직 멤버 기록이 없어요 · 눌러서 첫 기록 남기기</div>`}`;
+      ${st.count ? `<div class="tip-r"><span>멤버 별점</span><b><i class="star">★</i> ${st.avg.toFixed(1)} (${st.count})${st.wait ? ` · 웨이팅 ${WAIT_S[st.wait]}` : ""}${st.price ? ` · ${won(st.price)}` : ""}</b></div>` : `<div class="tip-foot">아직 멤버 기록이 없어요${pinned ? "" : " · 눌러서 자세히 보기"}</div>`}
+      ${pinned ? `<div class="tip-act"><button class="tip-more" data-tip-more>자세히 보기 ›</button></div>` : ""}`;
+    if (pinned) $("[data-tip-more]", tip).onclick = (e) => { e.stopPropagation(); hideTip(); openPlace(p.id); };
     const r = el.querySelector(".pin-b").getBoundingClientRect();
     tip.hidden = false;
     const w = tip.offsetWidth, h = tip.offsetHeight;
@@ -280,10 +301,13 @@
     tip.classList.remove("show"); void tip.offsetWidth; tip.classList.add("show");
     tipShownAt = Date.now();
   }
-  function hideTip() { const t = $("#tip"); if (t) { t.classList.remove("show"); t.hidden = true; tipShownAt = Date.now(); } }
+  function hideTip() { tipPinned = null; const t = $("#tip"); if (t) { t.classList.remove("show", "pinned"); t.hidden = true; tipShownAt = Date.now(); } }
 
   function onMapTap(lat, lng) {
-    if (!state.adding) return;
+    if (!state.adding) {
+      if (Date.now() - lastPinTap < 600) return;   // 핀을 누른 직후 따라오는 지도 클릭은 무시
+      hideTip(); collapsePanel(true); return;
+    }
     state.ghost?.remove();
     const g = document.createElement("div");
     g.className = "ghost";
@@ -629,39 +653,56 @@
     const since = Date.now() - 2 * 864e5;
     return [...new Set(state.reviews.filter((r) => r.uid === state.user.uid && r.status === "visited" && r.createdAt >= since).map((r) => placeById(r.placeId)?.category).filter(Boolean))];
   }
-  function candidates() {
+  // 룰렛 후보: 고른 카테고리(전체 목록과 같은 칩, 혼밥·거지맵 포함) 안의 가게 → 체크된 곳만
+  function rlPool() {
     const rl = state.rl, yc = rl.skipYesterday ? yesterdayCats() : [];
-    return state.places.map((p) => ({ p, st: stats(p) })).filter(({ p, st }) => {
-      if (!st.count && !rl.includeWish) return false;
-      const cat = p.category || "기타";
-      if (rl.want.length && !rl.want.includes(cat)) return false;
-      if (rl.avoid.includes(cat)) return false;
-      if (yc.includes(cat) && !rl.want.includes(cat)) return false; // 직접 고른 "땡기는 것"이 자동 규칙보다 우선
-      return passes(st);
-    });
+    return state.places.map((p) => ({ p, st: stats(p) })).filter((x) => {
+      if (!x.st.count && !rl.includeWish) return false;
+      if (rl.cats.length && !rl.cats.some((c) => inCat(x, c))) return false;
+      const cat = x.p.category || "기타";
+      if (yc.includes(cat) && !rl.cats.includes(cat)) return false;   // 직접 고른 카테고리가 "어제 먹은 것 빼기"보다 우선
+      return true;
+    }).sort(byRating);
   }
+  const candidates = () => rlPool().filter((x) => !state.rl.off.has(x.p.id));
   function openRoulette() {
     const rl = state.rl;
+    // 전체 탭에서 카테고리를 골라둔 상태로 열면 그 카테고리로 시작
+    if (!rl.opened && state.cat) rl.cats = [state.cat];
+    rl.opened = true;
     const render = () => {
-      const list = candidates(), yc = yesterdayCats();
-      const chip = (k, c) => `<button class="chip" data-${k}="${c}" aria-pressed="${rl[k].includes(c)}">${catLabel(c)}</button>`;
+      const prevScroll = state.sheet === "roulette" ? $("#sheet").scrollTop : 0;
+      const pool = rlPool(), list = pool.filter((x) => !rl.off.has(x.p.id)), yc = yesterdayCats();
+      const all = state.places.map((p) => ({ p, st: stats(p) })).filter((x) => x.st.count || rl.includeWish);
+      const cnt = (c) => all.filter((x) => inCat(x, c)).length;
+      const catChips = [`<button class="chip" data-rc="" aria-pressed="${!rl.cats.length}">전체<span class="n">${all.length}</span></button>`,
+        ...Object.keys(SPECIAL).map((c) => `<button class="chip special" data-rc="${c}" aria-pressed="${rl.cats.includes(c)}">${SPECIAL[c].label}<span class="n">${cnt(c)}</span></button>`),
+        ...CATS.filter((c) => cnt(c)).map((c) => `<button class="chip" data-rc="${c}" aria-pressed="${rl.cats.includes(c)}">${catLabel(c)}<span class="n">${cnt(c)}</span></button>`)].join("");
+      const allOn = pool.length && pool.every((x) => !rl.off.has(x.p.id));
       const s = showSheet(`
-        ${head("오늘 뭐 먹지?", `<span>우리 팀 기록 중에서 골라드려요${anyFilter() ? " · 상단 필터 적용 중" : ""}</span>`)}
-        <div class="field"><span class="flabel">땡기는 것 <span class="opt">여러 개 선택 · 안 고르면 전부</span></span><div class="chips">${CATS.map((c) => chip("want", c)).join("")}</div></div>
-        <div class="field"><span class="flabel">먹기 싫은 것</span><div class="chips neg">${CATS.map((c) => chip("avoid", c)).join("")}</div></div>
+        ${head("오늘 뭐 먹지?", `<span>카테고리를 고르고, 돌릴 가게를 체크해 주세요</span>`)}
+        <div class="field"><span class="flabel">카테고리 <span class="opt">여러 개 선택 · 안 고르면 전체</span></span><div class="chips rl-cats">${catChips}</div></div>
+        <div class="field"><div class="rl-head"><span class="flabel" style="margin:0">돌릴 가게 <b>${list.length}</b> / ${pool.length}곳</span>${pool.length ? `<button class="link" data-rl-all>${allOn ? "모두 빼기" : "모두 넣기"}</button>` : ""}</div>
+          <div class="rl-list">${pool.length ? pool.map((x) => `<label class="rl-item"><input type="checkbox" data-rp="${esc(x.p.id)}" ${rl.off.has(x.p.id) ? "" : "checked"} />${thumbHTML(x.p, "thumb sm")}<span class="rl-nm">${esc(x.p.name)}<small>${x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : ""}${esc(x.p.category || "기타")} · 도보 ${x.st.walk}분</small></span></label>`).join("") : `<p class="empty" style="padding:6px 0">이 카테고리에 돌릴 가게가 없어요</p>`}</div></div>
         <div class="field list-card" style="background:var(--parchment);padding:0 12px">
           <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${yc.length ? `최근 기록: ${yc.map(esc).join(", ")}` : "최근 이틀 내 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
           <div class="toggle-row" style="border-top:.5px solid var(--hair)"><span>아직 기록 없는 곳도 넣기<br><span style="font-size:13px;color:var(--ink-2)">가고 싶은 곳, 새로 등록된 곳 포함</span></span><button class="switch" role="switch" aria-checked="${rl.includeWish}" data-tg="includeWish" aria-label="가고 싶은 곳도 넣기"></button></div>
         </div>
         <div class="wheel" aria-hidden="true"><div class="wheel-band"></div><div class="wheel-track" id="track">${(list.length ? list : [{ p: { name: "후보가 없어요" } }]).slice(0, 5).map((x) => `<div class="wheel-item">${esc(x.p.name)}</div>`).join("")}</div></div>
-        <p class="count">후보 ${list.length}곳${list.length === 1 ? " · 조건을 조금 풀어보세요" : ""}</p>
+        <p class="count">후보 ${list.length}곳${list.length === 1 ? " · 한 곳뿐이에요" : ""}</p>
         <div id="rlResult"></div>
         <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="spin" ${list.length ? "" : "disabled"}>돌리기</button></div>
       `, "roulette");
-      $$("[data-want]", s).forEach((b) => (b.onclick = () => { const c = b.dataset.want; rl.want = rl.want.includes(c) ? rl.want.filter((x) => x !== c) : [...rl.want, c]; rl.avoid = rl.avoid.filter((x) => x !== c); render(); }));
-      $$("[data-avoid]", s).forEach((b) => (b.onclick = () => { const c = b.dataset.avoid; rl.avoid = rl.avoid.includes(c) ? rl.avoid.filter((x) => x !== c) : [...rl.avoid, c]; rl.want = rl.want.filter((x) => x !== c); render(); }));
+      $$("[data-rc]", s).forEach((b) => (b.onclick = () => {
+        const c = b.dataset.rc;
+        rl.cats = !c ? [] : rl.cats.includes(c) ? rl.cats.filter((x) => x !== c) : [...rl.cats, c];
+        render();
+      }));
+      $$("[data-rp]", s).forEach((b) => (b.onchange = () => { b.checked ? rl.off.delete(b.dataset.rp) : rl.off.add(b.dataset.rp); render(); }));
+      const ra = $("[data-rl-all]", s); if (ra) ra.onclick = () => { pool.forEach((x) => (allOn ? rl.off.add(x.p.id) : rl.off.delete(x.p.id))); render(); };
       $$("[data-tg]", s).forEach((b) => (b.onclick = () => { rl[b.dataset.tg] = !rl[b.dataset.tg]; render(); }));
       $("#spin", s).onclick = () => spin(list, render);
+      s.scrollTop = prevScroll;
     };
     render();
   }
@@ -750,6 +791,7 @@
   const mtPast = (m) => m.date < TODAY() || (m.date === TODAY() && lunchOver());
   const openMeets = () => state.meetups.filter((m) => !mtPast(m) && !mtFull(m));
   const notifyOn = () => { try { return localStorage.getItem("lunchmap-notify") === "1"; } catch { return false; } };
+  const notifyPref = () => { try { return localStorage.getItem("lunchmap-notify"); } catch { return null; } };
   function updateMeetBadge() {
     const n = openMeets().length, b = $("#meetBadge");
     if (String(n) !== b.textContent) { b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); }
@@ -782,21 +824,12 @@
     const s = showSheet(`
       ${head("오늘 약속", `<span>점심 ${LUNCH.start}~${LUNCH.end} · 같이 먹을 사람을 선착순으로 모아요</span>`)}
       <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="mtNew">+ 약속 만들기</button></div>
-      ${canNotify ? `<div class="list-card" style="background:var(--parchment);padding:0 12px;margin-top:12px"><div class="toggle-row"><span>새 약속 알림 받기<br><span style="font-size:13px;color:var(--ink-2)">이 기기에서 지도를 열어둔 동안 알려줘요</span></span><button class="switch" role="switch" id="mtNotify" aria-checked="${notifyOn() && Notification.permission === "granted"}" aria-label="새 약속 알림 받기"></button></div></div>` : ""}
+      ${pushCard()}
       <div class="h3">${nextWord()} 점심 ${list.filter((m) => !mtPast(m)).length ? `${list.filter((m) => !mtPast(m)).length}건` : ""}</div>
       ${list.length ? list.map(meetCard).join("") : `<p class="empty" style="padding:8px 0">아직 오늘 약속이 없어요. 먼저 "오늘 ○○ 먹으실 분!"을 올려보세요.</p>`}
     `, "meets");
     $("#mtNew", s).onclick = () => openMeetForm(null);
-    const nt = $("#mtNotify", s);
-    if (nt) nt.onclick = async () => {
-      const on = nt.getAttribute("aria-checked") === "true";
-      if (on) { try { localStorage.setItem("lunchmap-notify", "0"); } catch {} return openMeetList(); }
-      let perm = Notification.permission;
-      try { if (perm === "default") perm = await Notification.requestPermission(); } catch {}
-      if (perm === "granted") { try { localStorage.setItem("lunchmap-notify", "1"); } catch {} toast("새 약속이 생기면 알려드릴게요"); }
-      else toast("브라우저 설정에서 알림을 허용해 주세요");
-      openMeetList();
-    };
+    bindPushCard(s, openMeetList);
     bindMeetButtons(s);
   }
 
@@ -815,6 +848,7 @@
   async function joinMeet(id) {
     try {
       await state.store.joinMeetup(id, state.user);
+      pushApi({ op: "meetup-join", meetupId: id });
       const m = state.meetups.find((x) => x.id === id);
       toast(m ? `참여했어요! ${dayWord(m)} ${LUNCH.start}에 만나요` : "참여했어요!");
       hideAlert();
@@ -853,8 +887,9 @@
         if (!pl) { $("#mfErr", s).textContent = "어디서 먹을지 골라주세요."; return; }
         $("#mfSave", s).disabled = true;
         try {
-          await state.store.addMeetup({ placeId: pl.id, placeName: pl.name, category: pl.category || "기타", hostUid: state.user.uid, hostName: state.user.name, time: LUNCH.start, date: targetDate(), capacity: f.cap, note: f.note.trim().slice(0, 40) });
-          toast("약속을 올렸어요. 멤버들에게 알림이 가요");
+          const mid = await state.store.addMeetup({ placeId: pl.id, placeName: pl.name, category: pl.category || "기타", hostUid: state.user.uid, hostName: state.user.name, time: LUNCH.start, date: targetDate(), capacity: f.cap, note: f.note.trim().slice(0, 40) });
+          pushApi({ op: "meetup-new", meetupId: mid });
+          toast("약속을 올렸어요. 알림을 켠 멤버 모두에게 알림이 가요");
           openMeetList();
         } catch (e) { console.error(e); $("#mfSave", s).disabled = false; toast("올리지 못했어요. 다시 눌러주세요"); }
       };
@@ -875,7 +910,7 @@
     $(".alert-txt", el).onclick = () => { hideAlert(); openMeetList(); };
     clearTimeout(alertTimer); alertTimer = setTimeout(hideAlert, 15000);
     navigator.vibrate?.([10, 60, 10]);
-    sysNotify(`${dayWord(m)} ${LUNCH.start} ${p.name} 먹으실 분!`, `${m.hostName}님이 선착순 ${m.capacity}명 모집 중이에요`, m.id);
+    if (!state.pushOn) sysNotify(`🍽 ${m.hostName}님이 점심 약속을 올렸어요`, `${dayWord(m)} ${LUNCH.start} ${p.name} · 선착순 ${mtCount(m)}/${m.capacity}명`, `meet-${m.id}`);
   }
   function onMeetups(list) {
     const prev = state.meetups;
@@ -887,7 +922,7 @@
       if (old && m.hostUid === state.user.uid) {
         Object.keys(m.joined || {}).filter((k) => !(old.joined || {})[k]).forEach((k) => {
           toast(`${m.joined[k].name}님이 참여했어요 (${mtCount(m)}/${m.capacity})${mtFull(m) ? " · 마감" : ""}`);
-          sysNotify(`${m.joined[k].name}님이 식사에 참여했어요`, `${dayWord(m)} ${LUNCH.start} ${m.placeName} · ${mtCount(m)}/${m.capacity}명`, m.id + k);
+          if (!state.pushOn) sysNotify(`🙋 ${m.joined[k].name}님이 식사에 참여했어요`, `${dayWord(m)} ${LUNCH.start} ${m.placeName} · ${mtCount(m)}/${m.capacity}명`, `join-${m.id}-${k}`);
         });
       }
     }
@@ -901,6 +936,92 @@
     if (!(notifyOn() && "Notification" in window && Notification.permission === "granted" && document.hidden)) return;
     const opts = { body, tag, icon: "./icons/icon-192.png", badge: "./icons/icon-192.png" };
     (navigator.serviceWorker?.ready || Promise.reject()).then((r) => r.showNotification(title, opts)).catch(() => { try { new Notification(title, opts); } catch {} });
+  }
+
+  // ───────── 앱을 닫아도 오는 알림 (Web Push) ─────────
+  // 새 약속 → 알림 켠 멤버 전원(올린 사람 제외) / 약속 참여 → 개설자에게만. 발송은 서버(/api/push)가 해요.
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && !!C.vapidPublicKey && !state.store.demo;
+  // 아이폰은 Safari 탭에서는 푸시가 안 되고, 홈 화면에 추가한 앱에서만 돼요 (iOS 16.4 이상)
+  const pushBlockedReason = () => {
+    if (state.store.demo) return "미리보기에서는 알림이 오지 않아요";
+    if (isIOS() && !standalone()) return "아이폰은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요";
+    if (!pushSupported()) return "이 브라우저는 알림을 지원하지 않아요";
+    if (Notification.permission === "denied") return "알림이 차단돼 있어요. 브라우저(또는 휴대폰) 설정에서 Lunchfound 알림을 허용해 주세요";
+    return "";
+  };
+  async function pushApi(body) {
+    if (state.store.demo || !state.store.idToken) return null;
+    try {
+      const t = await state.store.idToken();
+      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(body) });
+      return await r.json().catch(() => ({}));
+    } catch (e) { console.warn("push api", e); return null; }
+  }
+  const b64key = (s) => { const p = "=".repeat((4 - (s.length % 4)) % 4), raw = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(raw, (c) => c.charCodeAt(0)); };
+  async function swReady() {
+    if (!navigator.serviceWorker.controller) await navigator.serviceWorker.register("./sw.js").catch(() => {});
+    return navigator.serviceWorker.ready;
+  }
+  // 이 기기를 알림 받는 기기로 등록 (권한 요청은 반드시 버튼을 누른 직후에)
+  async function enablePush({ ask = true } = {}) {
+    const why = pushBlockedReason(); if (why) throw new Error(why);
+    let perm = Notification.permission;
+    if (perm === "default" && ask) perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("알림을 허용해야 받을 수 있어요");
+    const reg = await swReady();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64key(C.vapidPublicKey) });
+    const r = await pushApi({ op: "subscribe", sub: sub.toJSON() });
+    if (!r?.ok) throw new Error(r?.error || "알림 등록에 실패했어요. 잠시 뒤 다시 해주세요");
+    try { localStorage.setItem("lunchmap-notify", "1"); } catch {}
+    state.pushOn = true;
+  }
+  async function disablePush(keepPref) {
+    state.pushOn = false;
+    if (!keepPref) try { localStorage.setItem("lunchmap-notify", "0"); } catch {}
+    if (!("serviceWorker" in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration(); const sub = await reg?.pushManager.getSubscription();
+    if (sub) { await pushApi({ op: "unsubscribe", endpoint: sub.endpoint }); await sub.unsubscribe().catch(() => {}); }
+  }
+  // 시작할 때: 이미 허용한 기기는 조용히 다시 연결(누가 로그인했는지 갱신), 아직이면 한 번 권유
+  function initPush() {
+    if (state.store.demo) return;
+    navigator.serviceWorker?.addEventListener("message", (e) => { if (e.data?.type === "open-meet") openMeetList(); });
+    const q = new URLSearchParams(location.search).get("meet");
+    if (q) { history.replaceState(null, "", location.pathname); setTimeout(openMeetList, 600); }
+    if (pushBlockedReason()) return;
+    if (Notification.permission === "granted" && notifyPref() !== "0") { enablePush({ ask: false }).catch((e) => console.warn("push", e.message)); return; }
+    if (Notification.permission === "default" && notifyPref() !== "0" && !localStorage.getItem("lunchmap-push-asked")) {
+      setTimeout(() => {
+        try { localStorage.setItem("lunchmap-push-asked", "1"); } catch {}
+        showBanner({ icon: "🔔", title: "약속 알림을 켜둘까요?", sub: "새 점심 약속, 내 약속에 누가 참여했는지 앱을 닫아도 알려드려요", ms: 20000,
+          actions: [{ label: "알림 켜기", primary: true, run: () => enablePush().then(() => { toast("알림을 켰어요"); pushApi({ op: "test" }); }).catch((e) => toast(e.message)) }] });
+      }, 2500);
+    }
+  }
+  // 알림 설정 카드 (오늘 약속 · 내 정보에서 같이 사용)
+  function pushCard() {
+    const why = pushBlockedReason(), on = !why && state.pushOn;
+    return `<div class="list-card push-card" style="background:var(--parchment);padding:0 12px;margin-top:12px">
+      <div class="toggle-row"><span>약속 알림 받기<br><span style="font-size:13px;color:var(--ink-2)">${why ? esc(why) : "새 약속은 멤버 모두에게, 내 약속 참여 소식은 개설자에게 · 앱을 닫아도 와요"}</span></span>
+      <button class="switch" role="switch" data-push aria-checked="${on}" aria-label="약속 알림 받기" ${why && !state.pushOn ? "disabled" : ""}></button></div>
+      ${on ? `<div class="toggle-row" style="border-top:.5px solid var(--hair)"><span style="font-size:14px">이 기기로 시험 알림 보내기</span><button class="btn btn-plain" data-push-test style="min-height:34px;padding:0 14px;font-size:14px">보내기</button></div>` : ""}
+      ${isIOS() && !standalone() && !state.store.demo ? `<div class="toggle-row" style="border-top:.5px solid var(--hair)"><span style="font-size:14px">홈 화면에 추가하는 방법</span><button class="btn btn-plain" data-push-install style="min-height:34px;padding:0 14px;font-size:14px">보기</button></div>` : ""}
+    </div>`;
+  }
+  function bindPushCard(root, rerender) {
+    const sw = $("[data-push]", root);
+    if (sw) sw.onclick = async () => {
+      sw.disabled = true;
+      try {
+        if (state.pushOn) { await disablePush(); toast("이 기기 알림을 껐어요"); }
+        else { await enablePush(); toast("알림을 켰어요. 시험 알림을 보냈어요"); pushApi({ op: "test" }); }
+      } catch (e) { toast(e.message); }
+      rerender();
+    };
+    const t = $("[data-push-test]", root);
+    if (t) t.onclick = async () => { const r = await pushApi({ op: "test" }); toast(r?.sent ? "시험 알림을 보냈어요" : "보내지 못했어요. 알림을 껐다 다시 켜 주세요"); };
+    const ins = $("[data-push-install]", root); if (ins) ins.onclick = openInstall;
   }
 
   // ───────── 공용 배너 (상단 알림 자리) ─────────
@@ -1022,15 +1143,17 @@
       ${head("내 정보")}
       <div class="list-card" style="background:var(--parchment);margin-top:14px"><div class="member">${avatar(state.user.name)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(state.user.name)}님</div><div class="rl">${esc(m.role)}</div></div></div></div>
       <div class="field"><span class="flabel">화면 모드</span>${themeSeg()}</div>
+      <div class="field"><span class="flabel">알림</span>${pushCard()}</div>
       <div class="stack" style="margin-top:18px">
         <button class="btn btn-plain btn-block" id="installBtn">📲 앱으로 설치 (홈 화면에 추가)</button>
         ${state.store.demo ? `<div class="h3" style="margin-top:14px">알림 미리보기</div><div class="btns"><button class="btn btn-plain" id="pvPopular">12시 인기 장소</button><button class="btn btn-plain" id="pvRecord">점심 후 기록 요청</button></div>
         <button class="btn btn-plain btn-block" id="pvIntro">첫 화면 소개 다시 보기</button>` : ""}
         ${state.store.demo ? `<button class="btn btn-plain btn-block" id="switchMe">다른 멤버로 보기</button><button class="btn btn-secondary btn-block" id="resetDemo">미리보기 데이터 처음으로</button>` : `<button class="btn btn-plain btn-block" id="logout">로그아웃</button>`}
       </div>`, "me");
-    const lo = $("#logout", s); if (lo) lo.onclick = async () => { await state.store.signOut(); location.reload(); };
+    const lo = $("#logout", s); if (lo) lo.onclick = async () => { await disablePush(true).catch(() => {}); await state.store.signOut(); location.reload(); };
     $("#installBtn", s).onclick = openInstall;
     bindThemeSeg(s);
+    bindPushCard(s, openMe);
     const pp = $("#pvPopular", s); if (pp) pp.onclick = () => { closeSheet(); nudgePopular(); };
     const pr2 = $("#pvRecord", s); if (pr2) pr2.onclick = () => { closeSheet(); nudgeRecord(); };
     const pi = $("#pvIntro", s); if (pi) pi.onclick = () => { closeSheet(); showIntro(() => { $("#app").hidden = false; }); };
@@ -1078,7 +1201,8 @@
     try { localStorage.setItem("lunchfound-theme", pref); } catch {}
     const dark = pref === "dark" || (pref === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1C1C1E" : "#F5F4F1");
+    // 상태바·내비게이션바를 화면 배경(--parchment)과 같은 색으로 → 위아래 색이 달라 보이지 않게. 스플래시 중엔 버건디 유지
+    if (!document.getElementById("splash")) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : "#F5F5F7");
     const lb = $("#themeBtnLogin"); if (lb) lb.textContent = `${dark ? "🌙" : "☀️"} ${THEMES[pref]}`;
   }
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (themePref() === "system") applyTheme("system"); });
@@ -1090,8 +1214,12 @@
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1900); }
 
   function bindUI() {
-    $$("#tabs button").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); $("#panel").dataset.open = "true"; renderPanel(); stagger(); renderMarkers(); }));
-    $("#grab").onclick = () => { const p = $("#panel"); p.dataset.open = p.dataset.open === "true" ? "false" : "true"; };
+    $$("#tabs button").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); collapsePanel(false); $("#panel").dataset.open = "true"; renderPanel(); stagger(); renderMarkers(); }));
+    $("#grab").onclick = () => {
+      const p = $("#panel");
+      if ($("#app").classList.contains("panel-min")) { collapsePanel(false); return; }
+      p.dataset.open = p.dataset.open === "true" ? "false" : "true";
+    };
     $("#fab").onclick = openAdd;
     $("#rouletteBtn").onclick = openRoulette;
     $("#meetBtn").onclick = openMeetList;
@@ -1118,6 +1246,7 @@
     await Promise.all([initMap(), window.Walk ? Walk.init(C.office) : null]);
     if (state.store.demo) demoSimulate();
     registerSW();
+    initPush();
     setInterval(lunchTick, 60000); setTimeout(lunchTick, 4000);
     setTimeout(installTip, 25000);
     let seeded = false;
@@ -1162,7 +1291,7 @@
     $("#themeBtnLogin").onclick = () => { const order = ["light", "dark", "system"]; applyTheme(order[(order.indexOf(themePref()) + 1) % 3]); };
     // 스플래시: 최소 0.9초 보여준 뒤 부드럽게 사라짐 (그동안 데이터 준비)
     const t0 = performance.now(), sp = $("#splash");
-    const hideSplash = () => { if (!sp) return; setTimeout(() => { sp.classList.add("hide"); setTimeout(() => sp.remove(), 400); }, Math.max(0, 900 - (performance.now() - t0))); };
+    const hideSplash = () => { if (!sp) return; setTimeout(() => { sp.classList.add("hide"); setTimeout(() => { sp.remove(); applyTheme(themePref()); }, 400); }, Math.max(0, 900 - (performance.now() - t0))); };
     state.store = await createStore();
     hideSplash();
     let started = false;

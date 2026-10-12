@@ -8,6 +8,10 @@ service cloud.firestore {
         && request.auth.token.member is string
         && request.auth.token.member.size() > 0;
     }
+    // 관리자 = 이름 "admin" + 관리자 비밀번호로 로그인 (토큰에 admin: true)
+    function isAdmin() {
+      return member() && request.auth.token.admin == true;
+    }
 
     // 멤버 프로필: 누구나(멤버) 보기, 본인 것만 쓰기
     match /users/{uid} {
@@ -30,6 +34,7 @@ service cloud.firestore {
             || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
                 && request.resource.data.views.diff(resource.data.get('views', {})).affectedKeys().hasOnly([request.auth.uid])));
       allow delete: if member() && resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAdmin();   // 관리자: 장소 정보 수정·삭제
     }
 
     // 오늘 약속(식사조인): 주최자만 만들고 지울 수 있어요.
@@ -47,6 +52,18 @@ service cloud.firestore {
         && request.resource.data.joined.diff(resource.data.joined).affectedKeys().hasOnly([request.auth.uid])
         && request.resource.data.joined.size() <= resource.data.capacity;
       allow delete: if member() && resource.data.hostUid == request.auth.uid;
+      allow update, delete: if isAdmin();   // 관리자: 모든 약속 취소
+    }
+
+    // 멤버 사진: 멤버만 보기·올리기(본인 이름으로, 1MB 미만), 삭제는 올린 사람 또는 관리자
+    match /photos/{photoId} {
+      allow read: if member();
+      allow create: if member()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.placeId is string
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 1000000;
+      allow delete: if member() && (resource.data.uid == request.auth.uid || isAdmin());
     }
 
     // 기록: 멤버만 보기·추가. 수정·삭제는 쓴 사람만
@@ -58,6 +75,7 @@ service cloud.firestore {
         && request.resource.data.rating >= 0
         && request.resource.data.rating <= 5;
       allow update, delete: if member() && resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin();           // 관리자: 모든 기록 삭제
     }
   }
 }

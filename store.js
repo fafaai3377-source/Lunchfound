@@ -42,6 +42,7 @@
         await A.signInWithCustomToken(auth, j.token);
       },
       signOut: () => A.signOut(auth),
+      idToken: () => auth.currentUser?.getIdToken() ?? Promise.resolve(null),
       async getProfile() { return current ? { memberName: current.name, admin: current.admin } : null; },
       async setProfile() {},
       subscribe(cb) {
