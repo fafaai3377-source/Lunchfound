@@ -584,3 +584,13 @@ input { font: inherit; color: inherit; }
 .rl-nm { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; display: flex; flex-direction: column; }
 .rl-nm small { font-size: 12px; font-weight: 400; color: var(--ink-3); }
 .rl-item:has(input:not(:checked)) .rl-nm, .rl-item:has(input:not(:checked)) .thumb { opacity: .45; }
+
+/* ───────── PC: 식당 상세는 오른쪽에서 밀려 들어오는 고정 메뉴 (왼쪽 목록과 대칭) ───────── */
+@media (min-width: 900px) {
+  .scrim { pointer-events: none; }   /* 상세가 열려 있어도 지도·다른 핀을 그대로 누를 수 있게 */
+  .sheet { right: 12px; top: calc(var(--top) + 52px); bottom: 12px; width: 420px; border-radius: var(--r-lg); box-shadow: var(--shadow-float); animation: sideIn 380ms var(--ease-drawer); }
+  @keyframes sideIn { from { transform: translateX(calc(100% + 24px)); } }
+  .sheet.closing { animation: sideOut 220ms var(--ease-out) forwards; }
+  @keyframes sideOut { to { transform: translateX(calc(100% + 24px)); } }
+}
+@media (min-width: 900px) and (prefers-reduced-motion: reduce) { .sheet, .sheet.closing { animation: none; } }

@@ -229,7 +229,8 @@
       setTimeout(() => document.removeEventListener("click", swallow, true), 500);
       lastPinTap = Date.now();
       const p = placeById(d.id), pin = state.markers.get(d.id) && document.querySelector(`.pin[data-pid="${CSS.escape(d.id)}"]`);
-      if (p && pin) { collapsePanel(true); showTip(p, pin, true); } else openPlace(d.id);
+      // PC: 바로 오른쪽 상세 메뉴로 / 모바일: 작은 카드 → "자세히 보기"로 아래에서 올라옴
+      if (desk() || !p || !pin) { hideTip(); openPlace(d.id); } else { collapsePanel(true); showTip(p, pin, true); }
     }, true);
     renderMarkers();
   }
