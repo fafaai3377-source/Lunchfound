@@ -60,6 +60,8 @@
       deletePlace: (id) => F.deleteDoc(F.doc(db, "places", id)),
       async addReview(d) { const h = Math.round((+d.rating || 0) * 2); const r = await F.addDoc(F.collection(db, "reviews"), { ...d, rating: Math.floor(h / 2), rating2: h, createdAt: F.serverTimestamp() }); return r.id; },
       deleteReview: (id) => F.deleteDoc(F.doc(db, "reviews", id)),
+      // 내 기록 수정 (보안 규칙: 쓴 사람만 수정 가능)
+      async updateReview(id, d) { const h = Math.round((+d.rating || 0) * 2); await F.updateDoc(F.doc(db, "reviews", id), { ...d, rating: Math.floor(h / 2), rating2: h, updatedAt: F.serverTimestamp() }); },
       // 멤버 사진: 원본 크기 사진은 photos 컬렉션에 따로 두고, 가게를 열 때만 불러옴 (앱이 무거워지지 않게)
       async addPhoto(d) { const r = await F.addDoc(F.collection(db, "photos"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       async listPhotos(placeId) {
@@ -131,6 +133,7 @@
       async listPhotos(pid) { return data.photos.filter((x) => x.placeId === pid).sort((a, b) => b.createdAt - a.createdAt); },
       async deletePhotosOf(field, value) { data.photos = data.photos.filter((x) => x[field] !== value); save(); },
       async deletePhoto(pid) { data.photos = data.photos.filter((x) => x.id !== pid); save(); },
+      async updateReview(rid, d) { const r = data.reviews.find((x) => x.id === rid); if (r) Object.assign(r, d, { updatedAt: Date.now() }); save(); },
       async deleteReview(rid) { data.reviews = data.reviews.filter((r) => r.id !== rid); save(); },
       async addMeetup(d) { const i = id(); data.meetups.push({ id: i, date: today(), ...d, joined: {}, createdAt: Date.now() }); save(); return i; },
       async joinMeetup(mid, user) {

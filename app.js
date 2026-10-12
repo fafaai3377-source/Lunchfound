@@ -579,8 +579,8 @@
         ${(r.picks || []).length ? `<div class="tags">${r.picks.filter((k) => PICKS[k]).map((k) => `<span class="tag pick">${PICKS[k]}</span>`).join("")}</div>` : ""}
         ${r.memo ? `<p class="review-memo">${esc(r.memo)}</p>` : ""}
         ${r.thumb ? `<button class="review-ph" data-rph="${esc(r.id)}" aria-label="사진 크게 보기"><img src="${r.thumb}" alt="" />${r.photoCount > 1 ? `<span>+${r.photoCount - 1}</span>` : ""}</button>` : ""}
-        ${r.uid === me || isAdmin() ? `<button class="del" data-del="${esc(r.id)}">${r.uid === me ? "내 기록 삭제" : "기록 삭제 (관리자)"}</button>` : ""}</div></div>`).join("");
-    const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.memo ? ` · <span class="wish-memo">“${esc(r.memo)}”</span>` : ""}${r.uid === me || isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
+        ${r.uid === me ? `<div class="mine-acts"><button class="del" data-edit="${esc(r.id)}">수정</button><span aria-hidden="true">·</span><button class="del" data-del="${esc(r.id)}">삭제</button></div>` : isAdmin() ? `<button class="del" data-del="${esc(r.id)}">기록 삭제 (관리자)</button>` : ""}</div></div>`).join("");
+    const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.memo ? ` · <span class="wish-memo">“${esc(r.memo)}”</span>` : ""}${r.uid === me ? ` <button class="link" data-edit="${esc(r.id)}">수정</button> <button class="link" data-del="${esc(r.id)}">취소</button>` : isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
     const canDelCover = img && (img.uid === me || isAdmin());
     const hero = `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}
         <div class="hero-cap">${img ? `<span class="hero-who">📷 ${img.by ? `${esc(img.by)}님 사진` : `${esc(img.from || "대표")} 사진`}</span>` : `<span class="hero-who">아직 대표 사진이 없어요</span>`}
@@ -637,10 +637,13 @@
       toast("뺐어요");
     };
     const ni = $("[data-act=nextimg]", s); if (ni) ni.onclick = () => state.store.updatePlace(p.id, { imageIdx: ((p.imageIdx || 0) + 1) % p.images.length });
+    $$("[data-edit]", s).forEach((b) => (b.onclick = () => { const r = state.reviews.find((x) => x.id === b.dataset.edit); if (r) openReviewForm(r.placeId, r.status, r.id); }));
     $$("[data-del]", s).forEach((b) => (b.onclick = async () => { if (!confirm("이 기록을 삭제할까요?")) return; await state.store.deleteReview(b.dataset.del); state.store.deletePhotosOf?.("reviewId", b.dataset.del); toast("삭제했어요"); }));
     // 멤버 사진: 가게를 열 때만 원본을 불러와서 사진 모음 + 상단 대표 사진으로
     const loadPhotos = () => state.store.listPhotos ? state.store.listPhotos(p.id).then((all) => {
         if (state.selected !== p.id || state.sheet !== "place") return;
+        // 기록을 수정해 메뉴가 바뀌었으면 사진 설명도 지금 기록의 메뉴로
+        all = all.map((x) => { const r = x.reviewId && state.reviews.find((y) => y.id === x.reviewId); return r ? { ...x, menu: r.menu || "" } : x; });
         const menus = all.filter((x) => x.kind === "menu"), list = all.filter((x) => x.kind !== "menu");
         const mb = $("#menuBoard", s);
         if (mb && menus.length) {
@@ -763,15 +766,26 @@
   }
 
   // ───────── 기록 남기기 ─────────
-  function openReviewForm(placeId, status) {
+  function openReviewForm(placeId, status, editId) {
     const p = placeById(placeId); if (!p) return;
     state.selected = placeId;
-    state.form = { status, rating: 0, wait: "", solo: "", menu: "", price: "", picks: [], memo: "", photos: [], busy: false };
+    const old = editId ? state.reviews.find((r) => r.id === editId && r.uid === state.user.uid) : null;
+    if (editId && !old) return toast("내가 남긴 기록만 수정할 수 있어요");
+    state.form = old
+      ? { editId, status: old.status, rating: +old.rating || 0, wait: old.wait || "", solo: old.solo || "", menu: old.menu || "", price: old.price ? String(old.price) : "", picks: [...(old.picks || [])].filter((k) => PICKS[k]), memo: old.memo || "", photos: [], removed: [], busy: !!old.photoCount }
+      : { status, rating: 0, wait: "", solo: "", menu: "", price: "", picks: [], memo: "", photos: [], busy: false };
+    // 수정: 이 기록에 붙은 사진을 불러와서 빼거나 더할 수 있게
+    if (old?.photoCount && state.store.listPhotos) state.store.listPhotos(placeId).then((all) => {
+      const f = state.form; if (!f || f.editId !== editId) return;
+      f.photos = all.filter((x) => x.reviewId === editId).sort((a, b) => a.createdAt - b.createdAt).map((x) => ({ id: x.id, thumb: x.data, full: x.data, existing: true }));
+      f.busy = false; if (state.sheet === "review") render();
+    }).catch(() => { state.form.busy = false; render(); });
+    else state.form.busy = false;
     const render = () => {
       const f = state.form, v = f.status === "visited";
       const chips = (k, m) => Object.entries(m).map(([key, label]) => `<button class="chip" data-${k}="${key}" aria-pressed="${f[k] === key}">${label}</button>`).join("");
       const s = showSheet(`
-        ${head(esc(p.name), "<span>30초면 끝나요</span>")}
+        ${head(esc(p.name), f.editId ? "<span>내 기록 수정</span>" : "<span>30초면 끝나요</span>")}
         <div class="field"><div class="seg"><button data-status="visited" aria-pressed="${v}">가봤어요</button><button data-status="wish" aria-pressed="${!v}">♡ 가고 싶어요</button></div></div>
         ${v ? `
           <div class="field"><span class="flabel">별점</span><div class="stars half" role="group" aria-label="별점 (0.5점 단위)">${[1, 2, 3, 4, 5].map((n) => `<span class="st" data-fill="${f.rating >= n ? "full" : f.rating >= n - 0.5 ? "half" : ""}"><button data-star="${n - 0.5}" aria-label="${n - 0.5}점" aria-pressed="${f.rating === n - 0.5}"></button><button data-star="${n}" aria-label="${n}점" aria-pressed="${f.rating === n}"></button></span>`).join("")}<span class="star-v">${f.rating ? `${f.rating.toFixed(1)}점` : "0.5점 단위"}</span></div><p class="err" id="rerr"></p></div>
@@ -787,7 +801,7 @@
             <p class="err" id="phErr"></p></div>`
         : `<div class="field"><label class="flabel" for="rmenu">먹어보고 싶은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="더블 치즈버거" value="${esc(f.menu)}" /></div>
            <div class="field"><label class="flabel" for="rmemo">메모 <span class="opt">선택 · 왜 가고 싶은지, 누구랑 가고 싶은지</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="인스타에서 봤는데 웨이팅 있대요 · 금요일에 같이 가요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>`}
-        <div class="stack" style="margin-top:26px"><button class="btn btn-primary btn-block" id="rsave">기록 저장</button></div>
+        <div class="stack" style="margin-top:26px"><button class="btn btn-primary btn-block" id="rsave">${f.editId ? "수정 완료" : "기록 저장"}</button>${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
       `, "review");
       $$("[data-status]", s).forEach((b) => (b.onclick = () => { f.status = b.dataset.status; render(); }));
       $$("[data-star]", s).forEach((b) => (b.onclick = () => { f.rating = +b.dataset.star; render(); }));
@@ -803,7 +817,12 @@
         render();
       }));
       const pr = $("#rprice", s); if (pr) pr.oninput = () => { pr.value = pr.value.replace(/\D/g, ""); f.price = pr.value; };
-      $$("[data-ph-del]", s).forEach((b) => (b.onclick = () => { f.photos.splice(+b.dataset.phDel, 1); render(); }));
+      $$("[data-ph-del]", s).forEach((b) => (b.onclick = () => { const [x] = f.photos.splice(+b.dataset.phDel, 1); if (x?.existing) f.removed.push(x.id); render(); }));
+      const rd = $("#rdel", s); if (rd) rd.onclick = async () => {
+        if (!confirm("이 기록을 삭제할까요? 같이 올린 사진도 지워져요.")) return;
+        await state.store.deleteReview(f.editId); state.store.deletePhotosOf?.("reviewId", f.editId);
+        state.form = null; toast("기록을 삭제했어요"); openPlace(placeId);
+      };
       const pi = $("#rphoto", s);
       if (pi) pi.onchange = async () => {
         const files = [...pi.files].filter((x) => x.type.startsWith("image/")).slice(0, 3 - f.photos.length);
@@ -827,7 +846,23 @@
     const btn = $("#rsave"); btn.disabled = true;
     const photos = v ? f.photos : [];
     try {
-      const rid = await state.store.addReview({ placeId: state.selected, uid: state.user.uid, userName: state.user.name, status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu: f.menu.trim().slice(0, 40), price: v ? Number(f.price) || 0 : 0, picks: v ? f.picks : [], memo: f.memo.trim().replace(/\s+/g, " ").slice(0, 100), thumb: photos[0]?.thumb || "", photoCount: photos.length });
+      const body = { status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu: f.menu.trim().slice(0, 40), price: v ? Number(f.price) || 0 : 0, picks: v ? f.picks : [], memo: f.memo.trim().replace(/\s+/g, " ").slice(0, 100), photoCount: photos.length };
+      if (f.editId) {
+        // 수정: 기록 내용 바꾸고 → 뺀 사진 지우고 → 새 사진만 올림 (대표 썸네일은 첫 장 기준으로 다시 만듦)
+        const first = photos[0];
+        body.thumb = !first ? "" : first.existing ? await shrinkImage(await (await fetch(first.full)).blob(), 200, 0.6) : first.thumb;
+        await state.store.updateReview(f.editId, body);
+        const gone = v ? f.removed : [...f.removed, ...f.photos.filter((x) => x.existing).map((x) => x.id)];
+        for (const id of gone) await state.store.deletePhoto?.(id).catch(() => {});
+        const fresh = photos.filter((x) => !x.existing);
+        for (let i = 0; i < fresh.length; i++) {
+          btn.textContent = `사진 올리는 중 ${i + 1}/${fresh.length}`;
+          await state.store.addPhoto({ placeId: state.selected, reviewId: f.editId, uid: state.user.uid, userName: state.user.name, menu: body.menu, data: fresh[i].full });
+        }
+        toast("기록을 수정했어요");
+        const id = state.selected; state.form = null; openPlace(id); return;
+      }
+      const rid = await state.store.addReview({ placeId: state.selected, uid: state.user.uid, userName: state.user.name, ...body, thumb: photos[0]?.thumb || "" });
       for (let i = 0; i < photos.length; i++) {
         btn.textContent = `사진 올리는 중 ${i + 1}/${photos.length}`;
         await state.store.addPhoto({ placeId: state.selected, reviewId: rid, uid: state.user.uid, userName: state.user.name, menu: f.menu.trim().slice(0, 40), data: photos[i].full });

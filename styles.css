@@ -698,3 +698,9 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
   .topbar .roulette-btn { margin-left: 4px; }
   .panel { top: calc(var(--top) + 10px); }
 }
+
+/* 내 기록 수정·삭제 */
+.mine-acts { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--ink-3); font-size: 13px; }
+.mine-acts .del { margin-top: 0; padding: 4px 2px; white-space: nowrap; }
+.mine-acts .del[data-edit] { color: var(--accent); font-weight: 600; }
+.danger-text { color: #FF3B30 !important; }
