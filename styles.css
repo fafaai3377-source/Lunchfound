@@ -704,3 +704,13 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .mine-acts .del { margin-top: 0; padding: 4px 2px; white-space: nowrap; }
 .mine-acts .del[data-edit] { color: var(--accent); font-weight: 600; }
 .danger-text { color: #FF3B30 !important; }
+
+/* 세부 종류 (한식 · 국밥처럼) */
+.sub-pick { margin-top: 12px; padding: 12px; border-radius: 14px; background: var(--parchment, rgba(0,0,0,.03)); }
+.sub-pick .sub-l { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+.sub-pick .sub-l .opt { font-weight: 400; color: var(--ink-3); }
+.chips.sub { flex-wrap: wrap; gap: 6px; }
+.chips.sub .chip { min-height: 32px; padding: 5px 11px; font-size: 13px; }
+.chips.sub .sub-in { width: 104px; min-height: 32px; height: 32px; padding: 4px 12px; font-size: 13px; border-radius: 999px; }
+.cat-line { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.cat-line .cat-edit { font-size: 12px; font-weight: 600; padding: 2px 0; }

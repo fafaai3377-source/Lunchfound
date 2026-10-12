@@ -28,8 +28,22 @@
   const MAX_PICKS = 3;
   // 대표 카테고리와 이모지 (핀·칩·썸네일에 같이 씀)
   // 등록할 때 고르는 큰 분류 (순서 = 칩 순서)
-  const CAT_EMOJI = { 한식: "🍚", 중식: "🥟", 일식: "🍣", 양식: "🍝", 브런치: "🥞", 아시안: "🍛", 분식: "🍢", 면: "🍜", 고기: "🥩", 카페: "☕", 기타: "🍴" };
-  const CAT_ALIAS = { 동남아: "아시안" };   // 잠깐 "동남아"로 저장된 가게도 아시안으로 보이게
+  const CAT_EMOJI = { 한식: "🍚", 중식: "🥟", 일식: "🍣", 양식: "🍝", 브런치: "🥞", 아시안: "🍛", 분식: "🍢", 고기: "🥩", 카페: "☕", 기타: "🍴" };
+  const CAT_ALIAS = { 동남아: "아시안", 면: "한식" };   // 예전 분류 이름으로 저장된 가게도 지금 분류로 보이게 (면 → 칼국수·냉면은 한식, 라멘은 일식)
+  // 세부 종류: 큰 분류를 고르면 아래에 뜨는 한 단어 (예: 한식 · 국밥, 일식 · 라멘). 목록에 없으면 직접 입력
+  const SUBS = {
+    한식: ["국밥", "순대국", "해장국", "감자탕", "찌개", "백반", "칼국수", "냉면", "국수", "비빔밥", "보쌈", "덮밥"],
+    중식: ["짜장·짬뽕", "짬뽕", "마라탕", "탕수육", "볶음밥", "딤섬", "우육면"],
+    일식: ["라멘", "돈카츠", "초밥", "덮밥", "우동", "소바", "카레", "오마카세"],
+    양식: ["파스타", "피자", "버거", "스테이크", "샐러드", "리조또"],
+    브런치: ["샌드위치", "베이글", "토스트", "팬케이크", "샐러드"],
+    아시안: ["쌀국수", "반미", "분짜", "태국", "인도 커리", "마라"],
+    분식: ["떡볶이", "김밥", "라면", "튀김"],
+    고기: ["삼겹살", "갈비", "제육", "곱창", "숯불구이"],
+    카페: ["커피", "디저트", "베이커리"],
+    기타: [],
+  };
+  const subGuess = (cat, name = "") => (SUBS[cat] || []).find((x) => name.includes(x)) || "";
   const CATS = Object.keys(CAT_EMOJI);
   const catLabel = (c) => `${CAT_EMOJI[c] || "🍴"} ${c}`;
   function catFrom(raw, name = "") {
@@ -41,9 +55,8 @@
     if (/아시아|동남아|베트남|태국|타이|인도|쌀국수|커리|카레|분짜|팟타이|나시고랭/.test(s)) return "아시안";
     if (/양식|이탈리|파스타|피자|햄버거|버거|스테이크|멕시|패스트푸드/.test(s)) return "양식";
     if (/고기|구이|갈비|삼겹|곱창|육류|숯불|정육/.test(s)) return "고기";
-    if (/국수|냉면|칼국수|막국수|수제비|면/.test(s)) return "면";
     if (/분식|떡볶이|김밥|치킨/.test(s)) return "분식";
-    if (/한식|국밥|해장국|찌개|백반|감자탕|곰탕|설렁탕|순대/.test(s)) return "한식";
+    if (/한식|국밥|해장국|찌개|백반|감자탕|곰탕|설렁탕|순대|국수|냉면|칼국수|막국수|수제비/.test(s)) return "한식";
     return "기타";
   }
   function emojiFor(p) {
@@ -593,7 +606,7 @@
         <div class="hero-cap">${img ? `<span class="hero-who">📷 ${img.by ? `${esc(img.by)}님 사진` : `${esc(img.from || "대표")} 사진`}</span>` : `<span class="hero-who">${isAdmin() ? "아직 대표 사진이 없어요" : "기록에 사진을 남기면 여기 보여요"}</span>`}
           <span class="hero-btns">${p.images?.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}${canDelCover ? `<button data-act="delcover">빼기</button>` : ""}${isAdmin() ? `<label class="hero-up"><input type="file" accept="image/*" hidden id="coverIn" />📷 ${img ? "사진 추가" : "대표 사진 올리기"}</label>` : ""}</span></div></div>`;
     const s = showSheet(`
-      ${head(esc(p.name), `<span>${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}</span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
+      ${head(esc(p.name), `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
       ${hero}
       <div class="stats">
         <div class="stat"><div class="k">별점</div><div class="v">${st.count ? `★ ${st.avg.toFixed(1)}` : "–"}</div></div>
@@ -688,6 +701,7 @@
       mi.value = "";
     };
     const ep = $("[data-act=editplace]", s); if (ep) ep.onclick = () => openEditPlace(p);
+    const ec = $("[data-act=editcat]", s); if (ec) ec.onclick = () => openEditPlace(p);
     const dp = $("[data-act=delplace]", s);
     if (dp) dp.onclick = async () => { if (!confirm("이 장소와 내 기록을 삭제할까요?")) return; for (const r of st.rs) await state.store.deleteReview(r.id); await state.store.deletePhotosOf?.("placeId", p.id); await state.store.deletePlace(p.id); closeSheet(); toast("장소를 삭제했어요"); };
   }
@@ -723,24 +737,37 @@
     if (exists) return openPlace(exists.id);
     // 검색 결과로 등록할 때도 종류를 한 번 고르게 (자동으로 추측한 종류를 미리 골라둠)
     const guess = catFrom(r.categoryRaw, r.name);
-    let cat = guess === "기타" ? "" : guess;
+    const f = { category: guess === "기타" ? "" : guess, note: "" };
+    f.note = subGuess(f.category, r.name);
     const render = () => {
       const s = showSheet(`
         ${head(esc(r.name), `<b>사옥에서 도보 ${walkMin(r.lat, r.lng)}분</b>${r.address ? `<span>${esc(r.address)}</span>` : ""}`)}
-        <div class="field"><span class="flabel">어떤 종류인가요? <span class="opt">${guess !== "기타" ? "자동으로 골라뒀어요 · 다르면 바꿔주세요" : "하나 골라주세요"}</span></span>${catChipsHTML(cat)}<p class="err" id="cerr"></p></div>
+        <div class="field"><span class="flabel">어떤 종류인가요? <span class="opt">${guess !== "기타" ? "자동으로 골라뒀어요 · 다르면 바꿔주세요" : "하나 골라주세요"}</span></span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="csave">저장하고 기록 남기기</button></div>
       `, "add");
-      $$("[data-cat]", s).forEach((b) => (b.onclick = () => { cat = b.dataset.cat; render(); }));
+      bindCatPick(s, f, render);
       $("#csave", s).onclick = async () => {
-        if (!cat) { $("#cerr", s).textContent = "종류를 하나 골라주세요."; return; }
+        if (!f.category) { $("#cerr", s).textContent = "종류를 하나 골라주세요."; return; }
         $("#csave", s).disabled = true;
-        await createPlace({ name: r.name, category: cat, lat: r.lat, lng: r.lng, address: r.address || "", kakaoId: r.kakaoId || "", placeUrl: r.placeUrl || "" });
+        await createPlace({ name: r.name, category: f.category, note: f.note.slice(0, 12), lat: r.lat, lng: r.lng, address: r.address || "", kakaoId: r.kakaoId || "", placeUrl: r.placeUrl || "" });
       };
     };
     render();
   }
   // 종류 고르기 칩 (등록·수정 공통): 한 줄에 큰 분류만, 하나만 선택
   const catChipsHTML = (cur, key = "cat") => `<div class="chips cat-pick">${CATS.map((c) => `<button class="chip" data-${key}="${c}" aria-pressed="${cur === c}">${catLabel(c)}</button>`).join("")}</div>`;
+  // 큰 분류 + 세부 종류(선택). f[catKey] / f[subKey]를 바꾸고 render로 다시 그림
+  function catPickHTML(cat, sub) {
+    const subs = SUBS[cat] || [], own = sub && !subs.includes(sub) ? sub : "";
+    return catChipsHTML(cat, "cp") + (cat ? `<div class="sub-pick"><span class="sub-l">세부 종류 <span class="opt">선택 · 목록에 보여요</span></span>
+      <div class="chips sub">${subs.map((x) => `<button class="chip" data-cp-sub="${esc(x)}" aria-pressed="${sub === x}">${esc(x)}</button>`).join("")}<input class="input sub-in" data-cp-own maxlength="12" placeholder="직접 입력" value="${esc(own)}" /></div></div>` : "");
+  }
+  function bindCatPick(s, f, render, catKey = "category", subKey = "note") {
+    $$("[data-cp]", s).forEach((b) => (b.onclick = () => { if (f[catKey] !== b.dataset.cp) { f[catKey] = b.dataset.cp; f[subKey] = ""; } render(); }));
+    $$("[data-cp-sub]", s).forEach((b) => (b.onclick = () => { f[subKey] = f[subKey] === b.dataset.cpSub ? "" : b.dataset.cpSub; render(); }));
+    const own = $("[data-cp-own]", s);
+    if (own) { own.oninput = () => { f[subKey] = own.value.trim(); $$("[data-cp-sub]", s).forEach((b) => b.setAttribute("aria-pressed", "false")); }; }
+  }
   async function createPlace(d) {
     try {
       const data = { ...d, images: [], imageIdx: 0, createdBy: state.user.uid, createdByName: state.user.name };
@@ -764,18 +791,18 @@
     state.ghost?.remove(); state.ghost = null;
   }
   function openPinForm(lat, lng) {
-    state.form = { name: "", category: "", lat, lng };
+    state.form = { name: "", category: "", note: "", lat, lng };
     const render = () => {
       const f = state.form;
       const s = showSheet(`
         ${head("새 장소", `<b>사옥에서 도보 ${walkMin(lat, lng)}분</b><span>위치가 다르면 지도를 다시 눌러주세요</span>`)}
         <div class="field"><label class="flabel" for="pname">가게 이름</label><input class="input" id="pname" maxlength="30" placeholder="간판에 적힌 이름 그대로" value="${esc(f.name)}" autocomplete="off" /><p class="err" id="perr"></p></div>
-        <div class="field"><span class="flabel">종류</span>${catChipsHTML(f.category)}<p class="err" id="cerr"></p></div>
+        <div class="field"><span class="flabel">종류</span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="psave">저장하고 기록 남기기</button></div>
       `, "pin");
       $("#scrim").hidden = true;
       const i = $("#pname", s); i.oninput = () => { f.name = i.value; $("#perr", s).textContent = ""; };
-      $$("[data-cat]", s).forEach((b) => (b.onclick = () => { f.category = b.dataset.cat; render(); }));
+      bindCatPick(s, f, render);
       $("#psave", s).onclick = async () => {
         const name = f.name.trim();
         if (!name) { $("#perr", s).textContent = "가게 이름을 적어주세요."; return; }
@@ -784,7 +811,7 @@
         if (dup) { stopAdding(); return openPlace(dup.id); }
         $("#psave", s).disabled = true;
         stopAdding();
-        await createPlace({ name, category: f.category, lat, lng, address: "", kakaoId: "", placeUrl: "" });
+        await createPlace({ name, category: f.category, note: f.note.slice(0, 12), lat, lng, address: "", kakaoId: "", placeUrl: "" });
       };
       if (!f.name) setTimeout(() => i.focus(), 60);
     };
@@ -1017,23 +1044,33 @@
   }
 
   // ───────── 장소 정보 수정 (관리자) ─────────
+  // 가게 종류 수정: 멤버 누구나 종류·세부 종류 / 관리자는 이름까지
   function openEditPlace(p) {
-    const f = { name: p.name, category: p.category || "기타", note: p.note || "" };
+    const full = isAdmin();
+    const f = { name: p.name, category: CATS.includes(p.category) ? p.category : "", note: p.note || "" };
     const render = () => {
       const s = showSheet(`
-        ${head("장소 정보 수정", "<span>관리자 · 모든 멤버에게 바로 반영돼요</span>")}
-        <div class="field"><label class="flabel" for="epName">가게 이름</label><input class="input" id="epName" maxlength="40" value="${esc(f.name)}" /><p class="err" id="epErr"></p></div>
-        <div class="field"><span class="flabel">종류</span>${catChipsHTML(f.category, "ec")}</div>
-        <div class="field"><label class="flabel" for="epNote">한 줄 설명 <span class="opt">선택 · 예: 라멘, 진주냉면</span></label><input class="input" id="epNote" maxlength="30" value="${esc(f.note)}" /></div>
+        ${head(full ? "장소 정보 수정" : "종류 수정", `<span>${full ? "관리자 · " : ""}모든 멤버에게 바로 반영돼요</span>`)}
+        ${full ? `<div class="field"><label class="flabel" for="epName">가게 이름</label><input class="input" id="epName" maxlength="40" value="${esc(f.name)}" /><p class="err" id="epErr"></p></div>` : `<div class="field"><div class="flabel">${esc(p.name)}</div></div>`}
+        <div class="field"><span class="flabel">종류</span>${catPickHTML(f.category, f.note)}<p class="err" id="ecErr"></p></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="epSave">저장</button><button class="btn btn-plain btn-block" id="epBack">취소</button></div>`, "editplace");
-      const n = $("#epName", s); n.oninput = () => (f.name = n.value);
-      const nt = $("#epNote", s); nt.oninput = () => (f.note = nt.value);
-      $$("[data-ec]", s).forEach((b) => (b.onclick = () => { f.category = b.dataset.ec; render(); }));
+      const n = $("#epName", s); if (n) n.oninput = () => (f.name = n.value);
+      bindCatPick(s, f, render);
       $("#epBack", s).onclick = () => openPlace(p.id);
       $("#epSave", s).onclick = async () => {
-        if (!f.name.trim()) { $("#epErr", s).textContent = "가게 이름을 적어주세요."; return; }
-        try { await state.store.updatePlace(p.id, { name: f.name.trim().slice(0, 40), category: f.category, note: f.note.trim().slice(0, 30), emoji: "" }); toast("장소 정보를 고쳤어요"); openPlace(p.id); }
-        catch (e) { console.error(e); toast("저장하지 못했어요"); }
+        if (full && !f.name.trim()) { $("#epErr", s).textContent = "가게 이름을 적어주세요."; return; }
+        if (!f.category) { $("#ecErr", s).textContent = "종류를 하나 골라주세요."; return; }
+        const btn = $("#epSave", s); btn.disabled = true;
+        const note = f.note.replace(/\s+/g, " ").trim().slice(0, 12);
+        try {
+          if (full || state.store.demo) await state.store.updatePlace(p.id, { ...(full ? { name: f.name.trim().slice(0, 40) } : {}), category: f.category, note, emoji: "" });
+          else {
+            const t = await state.store.idToken();
+            const r = await fetch("/api/place", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ op: "category", id: p.id, category: f.category, note }) });
+            if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "FAIL");
+          }
+          toast(full ? "장소 정보를 고쳤어요" : "종류를 고쳤어요"); openPlace(p.id);
+        } catch (e) { console.error(e); btn.disabled = false; toast("저장하지 못했어요"); }
       };
     };
     render();
