@@ -497,10 +497,18 @@ input { font: inherit; color: inherit; }
 .brand-big .logo { height: auto; width: min(100%, 300px); }
 .intro-brand .logo { height: auto; width: min(100%, 280px); margin: 0 auto; }
 .brand-pill .logo-mark { display: none; height: 17px; width: auto; }
+/* 모바일도 로고(// Lunchfound) 전체를 보여줌 — 헤더 한 줄에 들어가도록 크기만 줄임 */
 @media (max-width: 480px) {
   .brand-pill { padding: 0 14px; }
-  .brand-pill .logo { display: none; }
-  .brand-pill .logo-mark { display: block; }
+  .topbar .brand-pill { padding: 0 2px 0 2px; height: 40px; min-width: 0; flex: 0 1 auto; }
+  .topbar .brand-pill .logo { display: block; height: 15px; width: auto; max-width: 100%; object-fit: contain; object-position: left center; }
+  .topbar .top-row { gap: 6px; }
+  .topbar .roulette-btn, .topbar .meet-btn { height: 38px; padding: 0 11px; font-size: 14px; }
+  .topbar .me { width: 38px; height: 38px; }
+}
+@media (max-width: 389px) {
+  .topbar .brand-pill .logo { height: 13px; }
+  .topbar .roulette-btn, .topbar .meet-btn { padding: 0 9px; font-size: 13px; }
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .logo-mark { filter: invert(1); } }
 
