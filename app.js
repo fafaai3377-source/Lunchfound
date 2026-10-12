@@ -274,6 +274,12 @@
     const pinAt = (x, y) => document.elementFromPoint(x, y)?.closest?.(".pin");
     const mapEl = $("#map");
     mapEl.addEventListener("pointerdown", (e) => { const pin = pinAt(e.clientX, e.clientY); down = pin ? { id: pin.dataset.pid, x: e.clientX, y: e.clientY } : null; }, true);
+    // 지도를 누른 채 끌거나(이동) 두 손가락으로 확대한 건 "빈 곳 한 번 탭"이 아님 → 가게 카드·선택을 유지
+    const touching = new Map();
+    mapEl.addEventListener("pointerdown", (e) => { touching.set(e.pointerId, { x: e.clientX, y: e.clientY }); gesture = { moved: touching.size > 1, t: performance.now() }; }, true);
+    mapEl.addEventListener("pointermove", (e) => { const s0 = touching.get(e.pointerId); if (s0 && gesture && Math.hypot(e.clientX - s0.x, e.clientY - s0.y) > 10) gesture.moved = true; }, true);
+    const lift = (e) => { touching.delete(e.pointerId); if (gesture && performance.now() - gesture.t > 600) gesture.moved = true; };
+    mapEl.addEventListener("pointerup", lift, true); mapEl.addEventListener("pointercancel", (e) => { touching.delete(e.pointerId); if (gesture) gesture.moved = true; }, true);
     mapEl.addEventListener("pointerup", (e) => {
       if (!down) return;
       const d = down; down = null;
@@ -291,7 +297,7 @@
     renderMarkers();
   }
 
-  let lastPinTap = 0;
+  let lastPinTap = 0, gesture = null;
   // 모바일: 핀을 누르면 바로 도보 경로 모션 + 위쪽 정보 카드 (상세는 "자세히 보기"로)
   function previewPlace(p, pin) {
     collapsePanel(true);
@@ -443,6 +449,7 @@
   function onMapTap(lat, lng) {
     if (!state.adding) {
       if (Date.now() - lastPinTap < 600) return;   // 핀을 누른 직후 따라오는 지도 클릭은 무시
+      if (gesture?.moved) return;   // 끌기·확대·길게 누르기는 무시 — 짧게 한 번 탭했을 때만 선택 해제
       // 가게를 보고 있다가 지도 빈 곳을 누르면 ✕를 누른 것처럼 선택 해제 (상세 닫기 + 경로 지우기)
       if (state.sheet === "place") closeSheet();
       else if (state.selected || state.routeFor) { state.selected = null; MapKit.clearRoute?.(); state.routeFor = null; renderMarkers(); }
@@ -1644,7 +1651,8 @@
     const dark = pref === "dark" || (pref === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
     // 상태바·내비게이션바를 화면 배경(--parchment)과 같은 색으로 → 위아래 색이 달라 보이지 않게. 스플래시 중엔 버건디 유지
-    if (!document.getElementById("splash")) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : "#F5F5F7");
+    // 상태바 색: 모바일은 흰/검정 헤더와 같은 색으로 이어지게
+    if (!document.getElementById("splash")) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : matchMedia("(max-width: 899px)").matches ? "#FFFFFF" : "#F5F5F7");
     const lb = $("#themeBtnLogin"); if (lb) lb.textContent = `${dark ? "🌙" : "☀️"} ${THEMES[pref]}`;
   }
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (themePref() === "system") applyTheme("system"); });
@@ -1672,7 +1680,8 @@
     // 앱 화면·지도는 스크롤되면 안 됨: 브라우저가 포커스 때문에 밀어도 즉시 제자리로 (overflow: clip 미지원 브라우저 대비)
     ["#app", "#map"].forEach((s) => { const el = $(s); el.addEventListener("scroll", () => { if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; } }); });
     // 지도를 움직이거나 휠로 확대하면 정보 카드 숨김
-    ["pointerdown", "wheel"].forEach((t) => $("#map").addEventListener(t, hideTip, { passive: true }));
+    // 지도를 만지면 마우스 올려서 뜬 미리보기 카드만 닫음. 핀을 눌러 고정한 카드는 끌기·확대 중에도 유지 (빈 곳 한 번 탭으로만 닫힘)
+    ["pointerdown", "wheel"].forEach((t) => $("#map").addEventListener(t, () => { if (!tipPinned) hideTip(); }, { passive: true }));
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && (state.sheet || state.adding)) closeSheet(); });
   }
 
