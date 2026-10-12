@@ -1409,7 +1409,18 @@
   function registerSW() {
     // 미리보기(공유 링크) 페이지에는 서비스워커 파일이 없으니 등록하지 않음
     if (!("serviceWorker" in navigator) || window.PREVIEW_TILES || !/^https:|^http:\/\/localhost/.test(location.href)) return;
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    // 새 버전이 올라오면 바로 바꿔 끼우고 한 번 새로고침 — 홈 화면 앱이 예전 코드로 계속 도는 일이 없게
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloaded || state.sheet === "review" || state.sheet === "pin") return;
+      reloaded = true; location.reload();
+    });
+    navigator.serviceWorker.register("./sw.js").then((reg) => {
+      const check = () => reg.update().catch(() => {});
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") check(); });
+      setInterval(check, 30 * 60e3);
+    }).catch(() => {});
   }
 
   // ───────── 버튼 눌림 효과 (눌림 0.96배 · 100ms, 놓으면 스프링 복귀) ─────────
@@ -1553,15 +1564,10 @@
     initPush();
     setInterval(lunchTick, 60000); setTimeout(lunchTick, 4000);
     setTimeout(installTip, 25000);
-    let seeded = false;
+    // 기본 가게 자동 등록은 하지 않음 (예전 버전이 목록을 다 받기 전에 "비어 있다"고 보고 다시 등록하던 문제)
     state.store.subscribe(({ places, reviews, meetups }) => {
       state.places = places.map((p) => (CAT_ALIAS[p.category] ? { ...p, category: CAT_ALIAS[p.category] } : p)); state.reviews = reviews;
       onMeetups(meetups || []);
-      if (!seeded && window.SEED_PLACES && C.autoSeed) {
-        seeded = true;
-        const missing = SEED_PLACES.filter((s) => !places.some((p) => p.id === s.id || p.name === s.name));
-        if (missing.length && !places.some((p) => String(p.id).startsWith("seed-"))) seedPlaces(missing);
-      }
       if (state.pending && places.some((p) => p.id === state.pending.id)) state.pending = null;
       renderAll();
     });
@@ -1588,7 +1594,11 @@
       : i < 0 ? esc(n) : `${esc(n.slice(0, i))}<span class="chop" aria-hidden="true">//</span><b>${esc(n.slice(i + 2))}</b>`;
     // 상단 바: 넓은 화면은 전체 로고, 좁은 휴대폰은 // 마크만 (버튼들이 한 줄에 들어가도록)
     $("#brand").innerHTML = C.logo?.black ? `${brand}<img class="logo-mark" src="${C.logo.mark || C.logo.black}" alt="" aria-hidden="true" />` : brand;
-    $("#loginBrand").innerHTML = brand; $("#brand").setAttribute("aria-label", C.appTitle || n);
+    $("#loginBrand").innerHTML = brand; $("#brand").setAttribute("aria-label", `${C.appTitle || n} · 사옥으로 지도 맞추기`);
+    // 로고를 누르면: 보던 가게·카드를 닫고 사옥을 가운데로 지도 다시 맞춤
+    const br = $("#brand"); br.setAttribute("role", "button"); br.tabIndex = 0;
+    br.onclick = () => { if (state.sheet === "place") closeSheet(); hideTip(); state.selected = null; MapKit.clearRoute?.(); state.routeFor = null; renderMarkers(); if (state.mapReady) MapKit.home(); };
+    br.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); br.onclick(); } };
     document.title = C.appTitle || n;
     initPress();
     applyTheme(themePref());

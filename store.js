@@ -47,9 +47,11 @@
       async setProfile() {},
       subscribe(cb) {
         const st = { places: [], reviews: [], meetups: [] };
-        const emit = () => cb({ places: [...st.places], reviews: [...st.reviews], meetups: [...st.meetups] });
+        // 가게 목록을 처음 받기 전에는 화면에 내보내지 않음 (잠깐 "가게 0곳"으로 보이는 순간이 생기지 않게)
+        let gotPlaces = false;
+        const emit = () => { if (gotPlaces) cb({ places: [...st.places], reviews: [...st.reviews], meetups: [...st.meetups] }); };
         F.onSnapshot(F.query(F.collection(db, "meetups"), F.where("date", "in", [today(), tomorrow()])), (s) => { st.meetups = toArr(s); emit(); }, (e) => console.error(e));
-        F.onSnapshot(F.collection(db, "places"), (s) => { st.places = toArr(s); emit(); }, (e) => console.error(e));
+        F.onSnapshot(F.collection(db, "places"), (s) => { st.places = toArr(s); gotPlaces = true; emit(); }, (e) => console.error(e));
         // 반 별점: 보안 규칙(rating은 정수)을 그대로 두고 rating2(별점×2, 1~10)에 함께 저장 → 읽을 때 rating2/2로 복원
         F.onSnapshot(F.collection(db, "reviews"), (s) => { st.reviews = toArr(s).map((r) => (r.rating2 > 0 ? { ...r, rating: r.rating2 / 2 } : r)); emit(); }, (e) => console.error(e));
       },
