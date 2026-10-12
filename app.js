@@ -27,7 +27,9 @@
   const PICKS = { value: "💰 가성비", amount: "🍚 양 많아요", fast: "⚡ 빨리 나와요", taste: "😋 맛 보장", quiet: "🤫 조용해요", group: "👥 여럿이 좋아요", spicy: "🌶 매워요", hangover: "🍲 해장 추천" };
   const MAX_PICKS = 3;
   // 대표 카테고리와 이모지 (핀·칩·썸네일에 같이 씀)
-  const CAT_EMOJI = { 한식: "🍚", 고기: "🥩", 면: "🍜", 일식: "🍣", 중식: "🥟", 아시안: "🍛", 양식: "🍝", 브런치: "🥞", 분식: "🍢", 카페: "☕", 기타: "🍴" };
+  // 등록할 때 고르는 큰 분류 (순서 = 칩 순서)
+  const CAT_EMOJI = { 한식: "🍚", 중식: "🥟", 일식: "🍣", 양식: "🍝", 브런치: "🥞", 동남아: "🍛", 분식: "🍢", 면: "🍜", 고기: "🥩", 카페: "☕", 기타: "🍴" };
+  const CAT_ALIAS = { 아시안: "동남아" };   // 예전 이름으로 저장된 가게도 새 분류로 보이게
   const CATS = Object.keys(CAT_EMOJI);
   const catLabel = (c) => `${CAT_EMOJI[c] || "🍴"} ${c}`;
   function catFrom(raw, name = "") {
@@ -36,7 +38,7 @@
     if (/카페|커피|제과|베이커리|디저트|케이크|빵/.test(s)) return "카페";
     if (/라멘|라면|초밥|스시|일식|일본|돈까스|돈카츠|카츠|우동|소바|이자카야/.test(s)) return "일식";
     if (/중식|중국|짜장|짬뽕|마라|딤섬|훠궈|반점/.test(s)) return "중식";
-    if (/아시아|베트남|태국|타이|인도|쌀국수|커리|카레|분짜/.test(s)) return "아시안";
+    if (/아시아|동남아|베트남|태국|타이|인도|쌀국수|커리|카레|분짜|팟타이|나시고랭/.test(s)) return "동남아";
     if (/양식|이탈리|파스타|피자|햄버거|버거|스테이크|멕시|패스트푸드/.test(s)) return "양식";
     if (/고기|구이|갈비|삼겹|곱창|육류|숯불|정육/.test(s)) return "고기";
     if (/국수|냉면|칼국수|막국수|수제비|면/.test(s)) return "면";
@@ -423,6 +425,9 @@
   function onMapTap(lat, lng) {
     if (!state.adding) {
       if (Date.now() - lastPinTap < 600) return;   // 핀을 누른 직후 따라오는 지도 클릭은 무시
+      // 가게를 보고 있다가 지도 빈 곳을 누르면 ✕를 누른 것처럼 선택 해제 (상세 닫기 + 경로 지우기)
+      if (state.sheet === "place") closeSheet();
+      else if (state.selected || state.routeFor) { state.selected = null; MapKit.clearRoute?.(); state.routeFor = null; renderMarkers(); }
       hideTip(); collapsePanel(true); return;
     }
     state.ghost?.remove();
@@ -714,8 +719,26 @@
   async function pickResult(r) {
     const exists = state.places.find((p) => (r.kakaoId && p.kakaoId === r.kakaoId) || p.name.replace(/\s/g, "") === r.name.replace(/\s/g, ""));
     if (exists) return openPlace(exists.id);
-    await createPlace({ name: r.name, category: catFrom(r.categoryRaw, r.name), lat: r.lat, lng: r.lng, address: r.address || "", kakaoId: r.kakaoId || "", placeUrl: r.placeUrl || "" });
+    // 검색 결과로 등록할 때도 종류를 한 번 고르게 (자동으로 추측한 종류를 미리 골라둠)
+    const guess = catFrom(r.categoryRaw, r.name);
+    let cat = guess === "기타" ? "" : guess;
+    const render = () => {
+      const s = showSheet(`
+        ${head(esc(r.name), `<b>사옥에서 도보 ${walkMin(r.lat, r.lng)}분</b>${r.address ? `<span>${esc(r.address)}</span>` : ""}`)}
+        <div class="field"><span class="flabel">어떤 종류인가요? <span class="opt">${guess !== "기타" ? "자동으로 골라뒀어요 · 다르면 바꿔주세요" : "하나 골라주세요"}</span></span>${catChipsHTML(cat)}<p class="err" id="cerr"></p></div>
+        <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="csave">저장하고 기록 남기기</button></div>
+      `, "add");
+      $$("[data-cat]", s).forEach((b) => (b.onclick = () => { cat = b.dataset.cat; render(); }));
+      $("#csave", s).onclick = async () => {
+        if (!cat) { $("#cerr", s).textContent = "종류를 하나 골라주세요."; return; }
+        $("#csave", s).disabled = true;
+        await createPlace({ name: r.name, category: cat, lat: r.lat, lng: r.lng, address: r.address || "", kakaoId: r.kakaoId || "", placeUrl: r.placeUrl || "" });
+      };
+    };
+    render();
   }
+  // 종류 고르기 칩 (등록·수정 공통): 한 줄에 큰 분류만, 하나만 선택
+  const catChipsHTML = (cur, key = "cat") => `<div class="chips cat-pick">${CATS.map((c) => `<button class="chip" data-${key}="${c}" aria-pressed="${cur === c}">${catLabel(c)}</button>`).join("")}</div>`;
   async function createPlace(d) {
     try {
       const data = { ...d, images: [], imageIdx: 0, createdBy: state.user.uid, createdByName: state.user.name };
@@ -745,20 +768,21 @@
       const s = showSheet(`
         ${head("새 장소", `<b>사옥에서 도보 ${walkMin(lat, lng)}분</b><span>위치가 다르면 지도를 다시 눌러주세요</span>`)}
         <div class="field"><label class="flabel" for="pname">가게 이름</label><input class="input" id="pname" maxlength="30" placeholder="간판에 적힌 이름 그대로" value="${esc(f.name)}" autocomplete="off" /><p class="err" id="perr"></p></div>
-        <div class="field"><span class="flabel">종류 <span class="opt">선택</span></span><div class="chips">${CATS.map((c) => `<button class="chip" data-cat="${c}" aria-pressed="${f.category === c}">${catLabel(c)}</button>`).join("")}</div></div>
+        <div class="field"><span class="flabel">종류</span>${catChipsHTML(f.category)}<p class="err" id="cerr"></p></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="psave">저장하고 기록 남기기</button></div>
       `, "pin");
       $("#scrim").hidden = true;
       const i = $("#pname", s); i.oninput = () => { f.name = i.value; $("#perr", s).textContent = ""; };
-      $$("[data-cat]", s).forEach((b) => (b.onclick = () => { f.category = f.category === b.dataset.cat ? "" : b.dataset.cat; render(); }));
+      $$("[data-cat]", s).forEach((b) => (b.onclick = () => { f.category = b.dataset.cat; render(); }));
       $("#psave", s).onclick = async () => {
         const name = f.name.trim();
         if (!name) { $("#perr", s).textContent = "가게 이름을 적어주세요."; return; }
+        if (!f.category) { $("#cerr", s).textContent = "종류를 하나 골라주세요."; return; }
         const dup = state.places.find((p) => p.name.replace(/\s/g, "") === name.replace(/\s/g, ""));
         if (dup) { stopAdding(); return openPlace(dup.id); }
         $("#psave", s).disabled = true;
         stopAdding();
-        await createPlace({ name, category: f.category || "기타", lat, lng, address: "", kakaoId: "", placeUrl: "" });
+        await createPlace({ name, category: f.category, lat, lng, address: "", kakaoId: "", placeUrl: "" });
       };
       if (!f.name) setTimeout(() => i.focus(), 60);
     };
@@ -997,7 +1021,7 @@
       const s = showSheet(`
         ${head("장소 정보 수정", "<span>관리자 · 모든 멤버에게 바로 반영돼요</span>")}
         <div class="field"><label class="flabel" for="epName">가게 이름</label><input class="input" id="epName" maxlength="40" value="${esc(f.name)}" /><p class="err" id="epErr"></p></div>
-        <div class="field"><span class="flabel">종류</span><div class="chips">${CATS.map((c) => `<button class="chip" data-ec="${c}" aria-pressed="${f.category === c}">${catLabel(c)}</button>`).join("")}</div></div>
+        <div class="field"><span class="flabel">종류</span>${catChipsHTML(f.category, "ec")}</div>
         <div class="field"><label class="flabel" for="epNote">한 줄 설명 <span class="opt">선택 · 예: 라멘, 진주냉면</span></label><input class="input" id="epNote" maxlength="30" value="${esc(f.note)}" /></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="epSave">저장</button><button class="btn btn-plain btn-block" id="epBack">취소</button></div>`, "editplace");
       const n = $("#epName", s); n.oninput = () => (f.name = n.value);
@@ -1492,7 +1516,7 @@
     setTimeout(installTip, 25000);
     let seeded = false;
     state.store.subscribe(({ places, reviews, meetups }) => {
-      state.places = places; state.reviews = reviews;
+      state.places = places.map((p) => (CAT_ALIAS[p.category] ? { ...p, category: CAT_ALIAS[p.category] } : p)); state.reviews = reviews;
       onMeetups(meetups || []);
       if (!seeded && window.SEED_PLACES && C.autoSeed) {
         seeded = true;

@@ -34,9 +34,9 @@ window.SEED_PLACES = [
   { id: "seed-18", name: "홍콩반점0410", category: "중식", emoji: "🥟", lat: 37.554774, lng: 126.923639, walkM: 591, walkMin: 11 },
 
   // 🍛 아시안
-  { id: "seed-19", name: "어메이징 타일랜드 농카이", category: "아시안", emoji: "🍛", lat: 37.555329, lng: 126.919924, note: "태국 음식", walkM: 150, walkMin: 3 },
-  { id: "seed-20", name: "쌥이리", category: "아시안", emoji: "🍛", lat: 37.556481, lng: 126.922194, note: "태국 음식", walkM: 401, walkMin: 7 },
-  { id: "seed-21", name: "포머이 쌀국수 연남점", category: "아시안", emoji: "🍜", lat: 37.557811, lng: 126.922607, note: "베트남 쌀국수", walkM: 458, walkMin: 7 },
+  { id: "seed-19", name: "어메이징 타일랜드 농카이", category: "동남아", emoji: "🍛", lat: 37.555329, lng: 126.919924, note: "태국 음식", walkM: 150, walkMin: 3 },
+  { id: "seed-20", name: "쌥이리", category: "동남아", emoji: "🍛", lat: 37.556481, lng: 126.922194, note: "태국 음식", walkM: 401, walkMin: 7 },
+  { id: "seed-21", name: "포머이 쌀국수 연남점", category: "동남아", emoji: "🍜", lat: 37.557811, lng: 126.922607, note: "베트남 쌀국수", walkM: 458, walkMin: 7 },
 
   // 🍝 양식
   { id: "seed-22", name: "까사 포모도로", category: "양식", emoji: "🍝", lat: 37.558166, lng: 126.920255, walkM: 404, walkMin: 7 },
