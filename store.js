@@ -50,14 +50,15 @@
         const emit = () => cb({ places: [...st.places], reviews: [...st.reviews], meetups: [...st.meetups] });
         F.onSnapshot(F.query(F.collection(db, "meetups"), F.where("date", "in", [today(), tomorrow()])), (s) => { st.meetups = toArr(s); emit(); }, (e) => console.error(e));
         F.onSnapshot(F.collection(db, "places"), (s) => { st.places = toArr(s); emit(); }, (e) => console.error(e));
-        F.onSnapshot(F.collection(db, "reviews"), (s) => { st.reviews = toArr(s); emit(); }, (e) => console.error(e));
+        // 반 별점: 보안 규칙(rating은 정수)을 그대로 두고 rating2(별점×2, 1~10)에 함께 저장 → 읽을 때 rating2/2로 복원
+        F.onSnapshot(F.collection(db, "reviews"), (s) => { st.reviews = toArr(s).map((r) => (r.rating2 > 0 ? { ...r, rating: r.rating2 / 2 } : r)); emit(); }, (e) => console.error(e));
       },
       async addPlace(d) { const r = await F.addDoc(F.collection(db, "places"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       updatePlace: (id, patch) => F.updateDoc(F.doc(db, "places", id), patch),
       // 상세를 처음 연 멤버를 places.views.{uid}에 한 번만 기록 ("내 추천을 본 사람")
       markView: (id, uid) => F.updateDoc(F.doc(db, "places", id), { [`views.${uid}`]: true }),
       deletePlace: (id) => F.deleteDoc(F.doc(db, "places", id)),
-      async addReview(d) { const r = await F.addDoc(F.collection(db, "reviews"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
+      async addReview(d) { const h = Math.round((+d.rating || 0) * 2); const r = await F.addDoc(F.collection(db, "reviews"), { ...d, rating: Math.floor(h / 2), rating2: h, createdAt: F.serverTimestamp() }); return r.id; },
       deleteReview: (id) => F.deleteDoc(F.doc(db, "reviews", id)),
       // 멤버 사진: 원본 크기 사진은 photos 컬렉션에 따로 두고, 가게를 열 때만 불러옴 (앱이 무거워지지 않게)
       async addPhoto(d) { const r = await F.addDoc(F.collection(db, "photos"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },

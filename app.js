@@ -27,16 +27,17 @@
   const PICKS = { value: "💰 가성비", amount: "🍚 양 많아요", fast: "⚡ 빨리 나와요", taste: "😋 맛 보장", quiet: "🤫 조용해요", group: "👥 여럿이 좋아요", spicy: "🌶 매워요", hangover: "🍲 해장 추천" };
   const MAX_PICKS = 3;
   // 대표 카테고리와 이모지 (핀·칩·썸네일에 같이 씀)
-  const CAT_EMOJI = { 한식: "🍚", 고기: "🥩", 면: "🍜", 일식: "🍣", 중식: "🥟", 아시안: "🍛", 양식: "🍝", 분식: "🍢", 카페: "☕", 기타: "🍴" };
+  const CAT_EMOJI = { 한식: "🍚", 고기: "🥩", 면: "🍜", 일식: "🍣", 중식: "🥟", 아시안: "🍛", 양식: "🍝", 브런치: "🥞", 분식: "🍢", 카페: "☕", 기타: "🍴" };
   const CATS = Object.keys(CAT_EMOJI);
   const catLabel = (c) => `${CAT_EMOJI[c] || "🍴"} ${c}`;
   function catFrom(raw, name = "") {
     const s = `${raw || ""} ${name}`;
+    if (/브런치|팬케이크|에그베네딕트|프렌치토스트|베이글|샌드위치|토스트/.test(s)) return "브런치";
     if (/카페|커피|제과|베이커리|디저트|케이크|빵/.test(s)) return "카페";
     if (/라멘|라면|초밥|스시|일식|일본|돈까스|돈카츠|카츠|우동|소바|이자카야/.test(s)) return "일식";
     if (/중식|중국|짜장|짬뽕|마라|딤섬|훠궈|반점/.test(s)) return "중식";
     if (/아시아|베트남|태국|타이|인도|쌀국수|커리|카레|분짜/.test(s)) return "아시안";
-    if (/양식|이탈리|파스타|피자|햄버거|버거|스테이크|브런치|멕시|패스트푸드/.test(s)) return "양식";
+    if (/양식|이탈리|파스타|피자|햄버거|버거|스테이크|멕시|패스트푸드/.test(s)) return "양식";
     if (/고기|구이|갈비|삼겹|곱창|육류|숯불|정육/.test(s)) return "고기";
     if (/국수|냉면|칼국수|막국수|수제비|면/.test(s)) return "면";
     if (/분식|떡볶이|김밥|치킨/.test(s)) return "분식";
@@ -63,9 +64,9 @@
     seenMeet: new Set(), meetInit: false, mf: null,
     filters: { solo: false, wait: false, cheap: false },
     sort: "popular",   // 전체 목록 정렬: popular(인기 순) / rating(별점 높은 순) / near(가까운 순)
-    tab: "top", cats: [], sheet: null, selected: null, adding: false, ghost: null, form: null,
+    tab: "list", cats: [], sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
-    rl: { cats: [], off: new Set(), skipYesterday: true, includeWish: true, spinning: false },
+    rl: { want: [], avoid: [], off: new Set(), skipYesterday: true, includeWish: true, spinning: false },
   };
 
   // ───────── 계산 ─────────
@@ -101,6 +102,11 @@
       picks: Object.entries(visited.flatMap((r) => r.picks || []).reduce((c, k) => (PICKS[k] && (c[k] = (c[k] || 0) + 1), c), {})).sort((a, b) => b[1] - a[1]),
       memo: rs.find((r) => r.memo)?.memo || "",
     };
+  }
+  // 별점 표시(반 별 포함): ★★★★ + 반쪽 ★ + 회색 ★
+  function starsTxt(v) {
+    const full = Math.floor(v), half = v - full >= 0.5 ? 1 : 0;
+    return "★".repeat(full) + (half ? `<span class="half-star">★</span>` : "") + `<span style="color:var(--fill-2)">${"★".repeat(5 - full - half)}</span>`;
   }
   const anyFilter = () => state.cats.length > 0;
   // 특별 카테고리 — 혼밥: 멤버 기록이 대부분 "혼자 OK" / 거지맵: 멤버가 만원 미만으로 먹은 기록이 있는 곳
@@ -446,11 +452,7 @@
   function renderPanel() {
     const body = $("#panelBody"), all = state.places.map((p) => ({ p, st: stats(p) }));
     let html = "";
-    if (state.tab === "top") {
-      const top = all.filter((x) => x.st.count && passes(x.st, x.p)).sort((a, b) => b.st.avg - a.st.avg || b.st.count - a.st.count || a.st.walk - b.st.walk).slice(0, 3);
-      html = `<div class="section-h">오늘의 추천</div><div class="section-sub">멤버 별점이 높은 순${anyFilter() ? " · 필터 적용" : ""}</div>` +
-        (top.length ? top.map((x, i) => rowHTML(x, i + 1)).join("") : `<p class="empty">${anyFilter() ? "조건에 맞는 곳이 없어요. 필터를 하나 꺼보세요." : "아직 별점이 남은 곳이 없어요. 오늘 먹은 곳부터 남겨보세요."}</p>`);
-    } else if (state.tab === "list") {
+    if (state.tab === "list") {
       // 정렬(인기 / 별점 / 가까운 순) + 카테고리 칩(혼밥·거지맵 포함) / 전체일 때는 카테고리별로 묶어서
       const base = all.filter((x) => passes(x.st, x.p));
       const cats = CATS.filter((c) => base.some((x) => (x.p.category || "기타") === c));
@@ -492,8 +494,12 @@
   // ───────── 공통 필터 바 (상단, 웹·앱 공통) ─────────
   const catName = (c) => (SPECIAL[c] ? SPECIAL[c].label : catLabel(c));
   const filterLabel = () => state.cats.map((c) => (SPECIAL[c] ? SPECIAL[c].label : c)).join(" · ");
+  // PC 툴바: 칩 시작점을 지도 영역 왼쪽에 맞추려고 로고 너비를 CSS 변수로
+  const syncBrandW = () => { const b = $("#brand"); if (b?.offsetWidth) document.documentElement.style.setProperty("--brandW", b.offsetWidth + "px"); };
+  addEventListener("resize", syncBrandW);
   function renderFilterBar() {
     const bar = $("#filterbar"); if (!bar) return;
+    requestAnimationFrame(syncBrandW);
     const all = state.places.map((p) => ({ p, st: stats(p) }));
     const cnt = (c) => all.filter((x) => inCat(x, c)).length;
     const keys = [...Object.keys(SPECIAL), ...CATS.filter((c) => cnt(c))];
@@ -567,7 +573,7 @@
     const mineAny = st.rs.some((r) => r.uid === me), others = st.rs.some((r) => r.uid !== me);
     const reviews = st.visited.map((r) => `<div class="review">${avatar(r.userName, true)}<div class="review-body">
         <div class="review-top"><span class="who">${esc(r.userName)}님</span><span class="when">${ago(r.createdAt)}</span></div>
-        <div class="stars-s">${"★".repeat(r.rating)}<span style="color:var(--fill-2)">${"★".repeat(5 - r.rating)}</span></div>
+        <div class="stars-s">${starsTxt(r.rating)}</div>
         <div class="tags">${r.wait ? `<span class="tag">${WAIT[r.wait]}</span>` : ""}${r.solo ? `<span class="tag">${SOLO[r.solo]}</span>` : ""}${r.price ? `<span class="tag">${won(r.price)}</span>` : ""}</div>
         ${r.menu ? `<div class="review-menu">추천 메뉴 <b>${esc(r.menu)}</b></div>` : ""}
         ${(r.picks || []).length ? `<div class="tags">${r.picks.filter((k) => PICKS[k]).map((k) => `<span class="tag pick">${PICKS[k]}</span>`).join("")}</div>` : ""}
@@ -768,7 +774,7 @@
         ${head(esc(p.name), "<span>30초면 끝나요</span>")}
         <div class="field"><div class="seg"><button data-status="visited" aria-pressed="${v}">가봤어요</button><button data-status="wish" aria-pressed="${!v}">♡ 가고 싶어요</button></div></div>
         ${v ? `
-          <div class="field"><span class="flabel">별점</span><div class="stars">${[1, 2, 3, 4, 5].map((n) => `<button data-star="${n}" aria-label="${n}점" aria-pressed="${n <= f.rating}">★</button>`).join("")}</div><p class="err" id="rerr"></p></div>
+          <div class="field"><span class="flabel">별점</span><div class="stars half" role="group" aria-label="별점 (0.5점 단위)">${[1, 2, 3, 4, 5].map((n) => `<span class="st" data-fill="${f.rating >= n ? "full" : f.rating >= n - 0.5 ? "half" : ""}"><button data-star="${n - 0.5}" aria-label="${n - 0.5}점" aria-pressed="${f.rating === n - 0.5}"></button><button data-star="${n}" aria-label="${n}점" aria-pressed="${f.rating === n}"></button></span>`).join("")}<span class="star-v">${f.rating ? `${f.rating.toFixed(1)}점` : "0.5점 단위"}</span></div><p class="err" id="rerr"></p></div>
           <div class="field"><span class="flabel">점심시간 웨이팅</span><div class="chips">${chips("wait", WAIT)}</div></div>
           <div class="field"><span class="flabel">혼밥</span><div class="chips">${chips("solo", SOLO)}</div></div>
           <div class="field"><label class="flabel" for="rmenu">추천 메뉴</label><input class="input" id="rmenu" maxlength="40" placeholder="제육 정식" value="${esc(f.menu)}" /></div>
@@ -844,14 +850,17 @@
     const since = Date.now() - 2 * 864e5;
     return [...new Set(state.reviews.filter((r) => r.uid === state.user.uid && r.status === "visited" && r.createdAt >= since).map((r) => placeById(r.placeId)?.category).filter(Boolean))];
   }
-  // 룰렛 후보: 고른 카테고리(전체 목록과 같은 칩, 혼밥·거지맵 포함) 안의 가게 → 체크된 곳만
+  // 룰렛 후보: 땡기는 것(전체 목록과 같은 칩, 혼밥·거지맵 포함) 안에서 → 먹기 싫은 것 빼고 → 체크된 곳만
+  // "어제 먹은 종류 빼기"는 땡기는 것을 하나도 안 골랐을 때만 적용 (직접 고른 게 항상 우선)
+  function rlBase() {
+    const rl = state.rl;
+    return state.places.map((p) => ({ p, st: stats(p) })).filter((x) => (x.st.count || rl.includeWish) && !rl.avoid.includes(x.p.category || "기타"));
+  }
   function rlPool() {
-    const rl = state.rl, yc = rl.skipYesterday ? yesterdayCats() : [];
-    return state.places.map((p) => ({ p, st: stats(p) })).filter((x) => {
-      if (!x.st.count && !rl.includeWish) return false;
-      if (rl.cats.length && !rl.cats.some((c) => inCat(x, c))) return false;
-      const cat = x.p.category || "기타";
-      if (yc.includes(cat) && !rl.cats.includes(cat)) return false;   // 직접 고른 카테고리가 "어제 먹은 것 빼기"보다 우선
+    const rl = state.rl, yc = rl.skipYesterday && !rl.want.length ? yesterdayCats() : [];
+    return rlBase().filter((x) => {
+      if (rl.want.length && !rl.want.some((c) => inCat(x, c))) return false;
+      if (yc.includes(x.p.category || "기타")) return false;
       return true;
     }).sort(byRating);
   }
@@ -859,24 +868,27 @@
   function openRoulette() {
     const rl = state.rl;
     // 전체 탭에서 카테고리를 골라둔 상태로 열면 그 카테고리로 시작
-    if (!rl.opened && state.cats.length) rl.cats = [...state.cats];
+    if (!rl.opened && state.cats.length) rl.want = [...state.cats];
     rl.opened = true;
     const render = () => {
       const prevScroll = state.sheet === "roulette" ? $("#sheet").scrollTop : 0;
-      const pool = rlPool(), list = pool.filter((x) => !rl.off.has(x.p.id)), yc = yesterdayCats();
-      const all = state.places.map((p) => ({ p, st: stats(p) })).filter((x) => x.st.count || rl.includeWish);
-      const cnt = (c) => all.filter((x) => inCat(x, c)).length;
-      const catChips = [`<button class="chip" data-rc="" aria-pressed="${!rl.cats.length}">전체<span class="n">${all.length}</span></button>`,
-        ...Object.keys(SPECIAL).map((c) => `<button class="chip special" data-rc="${c}" aria-pressed="${rl.cats.includes(c)}">${SPECIAL[c].label}<span class="n">${cnt(c)}</span></button>`),
-        ...CATS.filter((c) => cnt(c)).map((c) => `<button class="chip" data-rc="${c}" aria-pressed="${rl.cats.includes(c)}">${catLabel(c)}<span class="n">${cnt(c)}</span></button>`)].join("");
+      const pool = rlPool(), list = pool.filter((x) => !rl.off.has(x.p.id));
+      const base = rlBase(), cnt = (c) => base.filter((x) => inCat(x, c)).length;
+      const used = CATS.filter((c) => state.places.some((p) => (p.category || "기타") === c));
+      const wantChips = [`<button class="chip" data-want="" aria-pressed="${!rl.want.length}">전체<span class="n">${base.length}</span></button>`,
+        ...Object.keys(SPECIAL).map((c) => `<button class="chip special" data-want="${c}" aria-pressed="${rl.want.includes(c)}">${SPECIAL[c].label}<span class="n">${cnt(c)}</span></button>`),
+        ...used.filter((c) => !rl.avoid.includes(c)).map((c) => `<button class="chip" data-want="${c}" aria-pressed="${rl.want.includes(c)}">${catLabel(c)}<span class="n">${cnt(c)}</span></button>`)].join("");
+      const avoidChips = used.map((c) => `<button class="chip" data-avoid="${c}" aria-pressed="${rl.avoid.includes(c)}">${catLabel(c)}</button>`).join("");
+      const ycAll = yesterdayCats(), ycOn = rl.skipYesterday && !rl.want.length && ycAll.length;
       const allOn = pool.length && pool.every((x) => !rl.off.has(x.p.id));
       const s = showSheet(`
         ${head("오늘 뭐 먹지?", `<span>카테고리를 고르고, 돌릴 가게를 체크해 주세요</span>`)}
-        <div class="field"><span class="flabel">카테고리 <span class="opt">여러 개 선택 · 안 고르면 전체</span></span><div class="chips rl-cats">${catChips}</div></div>
+        <div class="field"><span class="flabel">땡기는 것 <span class="opt">여러 개 선택 · 안 고르면 전체</span></span><div class="chips rl-cats">${wantChips}</div></div>
+        <div class="field"><span class="flabel">먹기 싫은 것 <span class="opt">고르면 후보에서 빠져요</span></span><div class="chips neg rl-cats">${avoidChips}</div></div>
         <div class="field"><div class="rl-head"><span class="flabel" style="margin:0">돌릴 가게 <b>${list.length}</b> / ${pool.length}곳</span>${pool.length ? `<button class="link" data-rl-all>${allOn ? "모두 빼기" : "모두 넣기"}</button>` : ""}</div>
-          <div class="rl-list">${pool.length ? pool.map((x) => `<label class="rl-item"><input type="checkbox" data-rp="${esc(x.p.id)}" ${rl.off.has(x.p.id) ? "" : "checked"} />${thumbHTML(x.p, "thumb sm")}<span class="rl-nm">${esc(x.p.name)}<small>${x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : ""}${esc(x.p.category || "기타")} · 도보 ${x.st.walk}분</small></span></label>`).join("") : `<p class="empty" style="padding:6px 0">이 카테고리에 돌릴 가게가 없어요</p>`}</div></div>
+          <div class="rl-list">${pool.length ? pool.map((x) => `<label class="rl-item"><input type="checkbox" data-rp="${esc(x.p.id)}" ${rl.off.has(x.p.id) ? "" : "checked"} />${thumbHTML(x.p, "thumb sm")}<span class="rl-nm">${esc(x.p.name)}<small>${x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : ""}${esc(x.p.category || "기타")} · 도보 ${x.st.walk}분</small></span></label>`).join("") : `<p class="empty" style="padding:6px 0">${ycOn ? `어제 먹은 종류(${ycAll.map(esc).join(", ")})를 빼서 남은 곳이 없어요. 아래 스위치를 꺼보세요.` : "조건에 맞는 가게가 없어요. 먹기 싫은 것을 조금 풀어보세요."}</p>`}</div></div>
         <div class="field list-card" style="background:var(--parchment);padding:0 12px">
-          <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${yc.length ? `최근 기록: ${yc.map(esc).join(", ")}` : "최근 이틀 내 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
+          <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${rl.want.length ? "땡기는 것을 고르면 적용 안 해요" : ycAll.length ? `최근 기록: ${ycAll.map(esc).join(", ")}` : "최근 이틀 내 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
           <div class="toggle-row" style="border-top:.5px solid var(--hair)"><span>아직 기록 없는 곳도 넣기<br><span style="font-size:13px;color:var(--ink-2)">가고 싶은 곳, 새로 등록된 곳 포함</span></span><button class="switch" role="switch" aria-checked="${rl.includeWish}" data-tg="includeWish" aria-label="가고 싶은 곳도 넣기"></button></div>
         </div>
         <div class="wheel" aria-hidden="true"><div class="wheel-band"></div><div class="wheel-track" id="track">${(list.length ? list : [{ p: { name: "후보가 없어요" } }]).slice(0, 5).map((x) => `<div class="wheel-item">${esc(x.p.name)}</div>`).join("")}</div></div>
@@ -884,9 +896,15 @@
         <div id="rlResult"></div>
         <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="spin" ${list.length ? "" : "disabled"}>돌리기</button></div>
       `, "roulette");
-      $$("[data-rc]", s).forEach((b) => (b.onclick = () => {
-        const c = b.dataset.rc;
-        rl.cats = !c ? [] : rl.cats.includes(c) ? rl.cats.filter((x) => x !== c) : [...rl.cats, c];
+      $$("[data-want]", s).forEach((b) => (b.onclick = () => {
+        const c = b.dataset.want;
+        rl.want = !c ? [] : rl.want.includes(c) ? rl.want.filter((x) => x !== c) : [...rl.want, c];
+        render();
+      }));
+      $$("[data-avoid]", s).forEach((b) => (b.onclick = () => {
+        const c = b.dataset.avoid;
+        rl.avoid = rl.avoid.includes(c) ? rl.avoid.filter((x) => x !== c) : [...rl.avoid, c];
+        rl.want = rl.want.filter((x) => x !== c);
         render();
       }));
       $$("[data-rp]", s).forEach((b) => (b.onchange = () => { b.checked ? rl.off.delete(b.dataset.rp) : rl.off.add(b.dataset.rp); render(); }));

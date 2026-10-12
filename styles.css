@@ -672,3 +672,29 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .hero-up { background: var(--accent); }
 .hero-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 반 별점 입력: 별 하나를 왼쪽(0.5)·오른쪽(1) 두 영역으로 */
+.stars.half { align-items: center; gap: 4px; }
+.stars .st { position: relative; display: inline-block; width: 36px; height: 36px; font-size: 34px; line-height: 36px; text-align: center; color: var(--fill-2); }
+.stars .st::before { content: "★"; }
+.stars .st::after { content: "★"; position: absolute; inset: 0; pointer-events: none; color: #FFB800; clip-path: inset(0 100% 0 0); transition: clip-path 160ms var(--ease-out, ease); }
+.stars .st[data-fill="half"]::after { clip-path: inset(0 50% 0 0); }
+.stars .st[data-fill="full"]::after { clip-path: inset(0 0 0 0); }
+.stars .st button { position: absolute; z-index: 1; top: 0; bottom: 0; width: 50%; font-size: 0; background: none; border: 0; padding: 0; color: transparent; animation: none !important; }
+.stars .st button:first-child { left: 0; }
+.stars .st button:last-child { right: 0; }
+.stars .star-v { margin-left: 8px; font-size: 14px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.half-star { background: linear-gradient(90deg, #FFB800 50%, var(--fill-2) 50%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* PC: 필터 칩을 로고·버튼과 같은 한 줄(툴바)로 — 칩 시작점은 지도 영역 왼쪽(목록 패널 오른쪽)에 맞춤 */
+@media (min-width: 900px) {
+  .topbar { display: flex; align-items: center; gap: 8px; }
+  .top-row { display: contents; }
+  .topbar .brand-pill { order: 0; flex: none; }
+  .topbar .filters { order: 1; flex: 1 1 auto; min-width: 0; margin: 0 0 0 max(0px, calc(var(--side) + 4px - var(--brandW, 200px)));
+    padding: 8px 4px 10px; align-items: center;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .topbar .roulette-btn, .topbar .meet-btn, .topbar .me { order: 2; flex: none; }
+  .topbar .roulette-btn { margin-left: 4px; }
+  .panel { top: calc(var(--top) + 10px); }
+}
