@@ -446,11 +446,7 @@
       else if (state.selected || state.routeFor) { state.selected = null; MapKit.clearRoute?.(); state.routeFor = null; renderMarkers(); }
       hideTip(); collapsePanel(true); return;
     }
-    state.ghost?.remove();
-    const g = document.createElement("div");
-    g.className = "ghost";
-    state.ghost = MapKit.add(g, lat, lng, "center");
-    openPinForm(lat, lng);
+    placeGhost(lat, lng);
   }
   // 사옥을 "보이는 지도 영역" 가운데로: 모바일은 위 버튼줄과 아래 목록 사이 가운데
   function homeView(instant) {
@@ -657,7 +653,7 @@
           return `<span class="hero-who">${r ? `📷 ${esc(r.userName || "멤버")}님 사진${r.menu ? ` · ${esc(r.menu)}` : ""}` : isAdmin() ? "아직 대표 사진이 없어요" : "기록에 사진을 남기면 여기 보여요"}</span>`; })()}
           <span class="hero-btns">${p.images?.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}${canDelCover ? `<button data-act="delcover">빼기</button>` : ""}${isAdmin() ? `<label class="hero-up"><input type="file" accept="image/*" hidden id="coverIn" />📷 ${img ? "사진 추가" : "대표 사진 올리기"}</label>` : ""}</span></div></div>`;
     const s = showSheet(`
-      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
+      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.address && /\d/.test(p.address) ? `<span class="addr-line">📍 ${esc(p.address)}</span>` : ""}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
       ${hero}
       <div class="stats">
         <div class="stat"><div class="k">별점</div><div class="v">${st.count ? `★ ${st.avg.toFixed(1)}` : "–"}</div></div>
@@ -764,12 +760,13 @@
       ${head("장소 추가", "<span>가게 이름으로 찾아보세요</span>")}
       <div class="field"><input class="input" id="q" placeholder="예: 어서와칼국수" autocomplete="off" enterkeyhint="search" /></div>
       <div class="results" id="results"></div>
-      <p class="empty" style="padding:14px 4px 0">목록에 없나요? <button class="link" id="pinMode">지도에서 직접 찍기</button></p>
+      <div class="add-alt"><span>검색에 안 나오나요?</span><button class="btn btn-plain" id="addrMode">📍 주소로 등록</button><button class="btn btn-plain" id="pinMode">🗺 지도에서 찍기</button></div>
     `, "add");
     const q = $("#q", s);
     let t;
     q.oninput = () => { clearTimeout(t); t = setTimeout(() => runSearch(q.value.trim()), 250); };
     $("#pinMode", s).onclick = startPinMode;
+    $("#addrMode", s).onclick = () => openAddrForm(q.value.trim());
     setTimeout(() => q.focus(), 60);
   }
   async function runSearch(query) {
@@ -781,7 +778,7 @@
     box.innerHTML = list.length ? list.slice(0, 12).map((r, i) => {
       const exists = state.places.find((p) => (r.kakaoId && p.kakaoId === r.kakaoId) || p.name.replace(/\s/g, "") === r.name.replace(/\s/g, ""));
       return `<button class="result" data-i="${i}"><div style="flex:1;min-width:0"><div class="nm">${esc(r.name)}${exists ? ` <span class="tag">이미 있음</span>` : ""}</div><div class="ad">${emojiFor({ name: r.name, category: catFrom(r.categoryRaw, r.name) })} ${esc(catFrom(r.categoryRaw, r.name))} · ${esc(r.address || "")}</div></div><span class="ds">도보 ${walkMin(r.lat, r.lng)}분</span></button>`;
-    }).join("") : `<p class="empty">검색 결과가 없어요. 이름을 줄여서 찾거나 지도에서 직접 찍어주세요.</p>`;
+    }).join("") : `<p class="empty">검색 결과가 없어요. 이름을 줄여서 찾거나, 아래 <b>주소로 등록</b>을 눌러주세요.</p>`;
     $$("[data-i]", box).forEach((b) => (b.onclick = () => pickResult(list[+b.dataset.i])));
   }
   async function pickResult(r) {
@@ -842,18 +839,74 @@
     state.adding = false; $("#addbar").hidden = true; $("#fab").hidden = false; MapKit.setAdding?.(false);
     state.ghost?.remove(); state.ghost = null;
   }
+  // ───────── 장소 추가: 주소로 찾기 → 지도에 핀 → 위치 확인 후 저장 ─────────
+  function openAddrForm(nameHint = "") {
+    let addr = "", busy = false, msg = "";
+    const render = () => {
+      const s = showSheet(`
+        ${head("주소로 등록", "<span>도로명 주소가 가장 정확해요</span>")}
+        <div class="field"><label class="flabel" for="addrQ">가게 주소</label><input class="input" id="addrQ" placeholder="예: 동교로 194, 와우산로29가길 4" value="${esc(addr)}" autocomplete="off" enterkeyhint="search" /><p class="err" id="aerr">${msg}</p></div>
+        <div class="stack"><button class="btn btn-primary btn-block" id="addrGo" ${busy ? "disabled" : ""}>${busy ? "찾는 중…" : "지도에서 위치 찾기"}</button>
+          ${msg ? `<button class="btn btn-plain btn-block" id="addrPin">이 주소로 지도에서 직접 찍기</button>` : ""}</div>
+        <p class="hint">네이버·카카오 지도에서 가게를 찾아 <b>도로명 주소</b>를 복사해 붙여넣으면 편해요. 찾은 뒤 위치가 조금 다르면 지도를 눌러 옮길 수 있어요.</p>
+      `, "add");
+      const i = $("#addrQ", s); i.oninput = () => (addr = i.value);
+      i.onkeydown = (e) => { if (e.key === "Enter") go(); };
+      $("#addrGo", s).onclick = go;
+      const ap = $("#addrPin", s); if (ap) ap.onclick = () => { state.form = { pinDraft: true, name: nameHint, category: "", note: "", address: addr.trim() }; startPinMode(); toast("가게 위치를 지도에서 눌러주세요"); };
+      if (!addr) setTimeout(() => i.focus(), 60);
+    };
+    const go = async () => {
+      if (busy) return;
+      if (!addr.trim()) { msg = ""; $("#aerr").textContent = "주소를 적어주세요."; return; }
+      busy = true; msg = ""; render();
+      const r = await MapKit.geocode?.(addr.trim());
+      busy = false;
+      if (!r) { msg = "이 주소를 지도에서 찾지 못했어요. 도로명 주소(예: 동교로 194)로 다시 적거나, 지도에서 직접 찍어주세요."; return render(); }
+      if (walkMin(r.lat, r.lng, true) > 40) { msg = "찾은 위치가 사옥에서 너무 멀어요. 주소를 다시 확인하거나 지도에서 직접 찍어주세요."; return render(); }
+      state.form = { pinDraft: true, name: nameHint, category: "", note: "", address: addr.trim(), approx: !r.exact };
+      startPinMode();
+      placeGhost(r.lat, r.lng);
+      // 모바일: 찾은 위치가 아래 입력창에 가리지 않게, 위 버튼줄과 입력창 사이 가운데로
+      if (desk()) MapKit.focus(r.lat, r.lng, 0, 0);
+      else { const sh = $("#sheet"), top = $("#filterbar").getBoundingClientRect().bottom, bottom = innerHeight - sh.offsetHeight;
+        MapKit.focus(r.lat, r.lng, 0, Math.round((top + Math.max(top + 80, bottom)) / 2 - innerHeight / 2)); }
+    };
+    render();
+  }
+  function placeGhost(lat, lng) {
+    state.ghost?.remove();
+    const g = document.createElement("div");
+    g.className = "ghost";
+    state.ghost = MapKit.add(g, lat, lng, "center");
+    openPinForm(lat, lng);
+  }
   function openPinForm(lat, lng) {
-    state.form = { name: "", category: "", note: "", lat, lng };
+    // 이름·종류·주소를 적다가 지도를 다시 눌러 위치를 옮겨도 적은 내용은 그대로
+    const prev = state.form?.pinDraft ? state.form : {};
+    state.form = { pinDraft: true, name: prev.name || "", category: prev.category || "", note: prev.note || "", address: prev.address || "", addrAuto: !!prev.addrAuto, approx: !!prev.approx && prev.lat == null, lat, lng };
+    // 지도에서 찍은 곳: 주소칸이 비었거나 자동으로 채운 값이면, 찍은 위치의 도로명 주소로 채움 (직접 적은 주소는 그대로)
+    if ((!state.form.address || state.form.addrAuto) && MapKit.reverse) {
+      const f0 = state.form;
+      MapKit.reverse(lat, lng).then((a) => {
+        if (!a || state.form !== f0 || (f0.address && !f0.addrAuto)) return;
+        f0.address = a; f0.addrAuto = true;
+        const el = $("#paddr"); if (el && document.activeElement !== el) el.value = a;
+      });
+    }
     const render = () => {
       const f = state.form;
       const s = showSheet(`
         ${head("새 장소", `<b>사옥에서 도보 ${walkMin(lat, lng)}분</b><span>위치가 다르면 지도를 다시 눌러주세요</span>`)}
+        ${f.approx ? `<p class="addr-warn">📍 주소의 정확한 건물은 못 찾아서 <b>근처 길</b>에 찍었어요. 지도를 눌러 가게 위치로 옮겨주세요.</p>` : ""}
         <div class="field"><label class="flabel" for="pname">가게 이름</label><input class="input" id="pname" maxlength="30" placeholder="간판에 적힌 이름 그대로" value="${esc(f.name)}" autocomplete="off" /><p class="err" id="perr"></p></div>
         <div class="field"><span class="flabel">종류</span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
+        <div class="field"><label class="flabel" for="paddr">주소 <span class="opt">찍은 위치로 자동 입력 · 고쳐도 돼요</span></label><input class="input" id="paddr" maxlength="60" placeholder="예: 동교로 194" value="${esc(f.address)}" autocomplete="off" /></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="psave">저장하고 기록 남기기</button></div>
       `, "pin");
       $("#scrim").hidden = true;
       const i = $("#pname", s); i.oninput = () => { f.name = i.value; $("#perr", s).textContent = ""; };
+      const ad = $("#paddr", s); ad.oninput = () => { f.address = ad.value; f.addrAuto = false; };
       bindCatPick(s, f, render);
       $("#psave", s).onclick = async () => {
         const name = f.name.trim();
@@ -863,7 +916,7 @@
         if (dup) { stopAdding(); return openPlace(dup.id); }
         $("#psave", s).disabled = true;
         stopAdding();
-        await createPlace({ name, category: f.category, note: f.note.slice(0, 12), lat, lng, address: "", kakaoId: "", placeUrl: "" });
+        await createPlace({ name, category: f.category, note: f.note.slice(0, 12), lat, lng, address: f.address.trim().slice(0, 60), kakaoId: "", placeUrl: "" });
       };
       if (!f.name) setTimeout(() => i.focus(), 60);
     };
@@ -1103,14 +1156,16 @@
   // 가게 종류 수정: 멤버 누구나 종류·세부 종류 / 관리자는 이름까지
   function openEditPlace(p) {
     const full = isAdmin();
-    const f = { name: p.name, category: CATS.includes(p.category) ? p.category : "", note: p.note || "" };
+    const f = { name: p.name, category: CATS.includes(p.category) ? p.category : "", note: p.note || "", address: p.address || "" };
     const render = () => {
       const s = showSheet(`
         ${head(full ? "장소 정보 수정" : "종류 수정", `<span>${full ? "관리자 · " : ""}모든 멤버에게 바로 반영돼요</span>`)}
-        ${full ? `<div class="field"><label class="flabel" for="epName">가게 이름</label><input class="input" id="epName" maxlength="40" value="${esc(f.name)}" /><p class="err" id="epErr"></p></div>` : `<div class="field"><div class="flabel">${esc(p.name)}</div></div>`}
+        ${full ? `<div class="field"><label class="flabel" for="epName">가게 이름</label><input class="input" id="epName" maxlength="40" value="${esc(f.name)}" /><p class="err" id="epErr"></p></div>
+          <div class="field"><label class="flabel" for="epAddr">주소 <span class="opt">상세 화면에 보여요</span></label><input class="input" id="epAddr" maxlength="60" value="${esc(f.address)}" /></div>` : `<div class="field"><div class="flabel">${esc(p.name)}</div></div>`}
         <div class="field"><span class="flabel">종류</span>${catPickHTML(f.category, f.note)}<p class="err" id="ecErr"></p></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="epSave">저장</button><button class="btn btn-plain btn-block" id="epBack">취소</button></div>`, "editplace");
       const n = $("#epName", s); if (n) n.oninput = () => (f.name = n.value);
+      const ea = $("#epAddr", s); if (ea) ea.oninput = () => (f.address = ea.value);
       bindCatPick(s, f, render);
       $("#epBack", s).onclick = () => openPlace(p.id);
       $("#epSave", s).onclick = async () => {
@@ -1119,7 +1174,7 @@
         const btn = $("#epSave", s); btn.disabled = true;
         const note = f.note.replace(/\s+/g, " ").trim().slice(0, 12);
         try {
-          if (full || state.store.demo) await state.store.updatePlace(p.id, { ...(full ? { name: f.name.trim().slice(0, 40) } : {}), category: f.category, note, emoji: "" });
+          if (full || state.store.demo) await state.store.updatePlace(p.id, { ...(full ? { name: f.name.trim().slice(0, 40), address: f.address.trim().slice(0, 60) } : {}), category: f.category, note, emoji: "" });
           else {
             const t = await state.store.idToken();
             const r = await fetch("/api/place", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ op: "category", id: p.id, category: f.category, note }) });

@@ -742,3 +742,15 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; align-self: stretch; flex: none; }
 .row-side .row-walk { align-self: auto; }
 .row-side .fav { margin-right: -6px; margin-top: auto; }
+
+/* 주소로 등록 */
+.add-alt { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 16px 2px 0; font-size: 14px; color: var(--ink-2); }
+.add-alt span { width: 100%; }
+.add-alt .btn { flex: 1; min-height: 44px; white-space: nowrap; }
+.hint { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 14px 2px 0; }
+.addr-warn { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: #FFF4E5; color: #8A5300; font-size: 13px; line-height: 1.45; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .addr-warn { background: #3A2A12; color: #FFCF8A; } }
+:root[data-theme="dark"] .addr-warn { background: #3A2A12; color: #FFCF8A; }
+.addr-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* 모바일 새 장소 입력창: 찍은 위치가 보이도록 화면의 60%까지만, 나머지는 스크롤 */
+@media (max-width: 899px) { .sheet[data-kind="pin"] { max-height: 60vh; overflow-y: auto; } }

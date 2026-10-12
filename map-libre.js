@@ -127,5 +127,33 @@
     } catch { return []; }
   }
 
-  window.MapKit = { init, add, focus, zoom, home, setAdding, search, showRoute, clearRoute, fitRoute, attribution: "" };
+  // 주소 → 좌표 (OpenStreetMap, 키 없음). 도로명 주소가 가장 잘 맞고, 건물 번호까지 맞으면 exact
+  async function geocode(addr) {
+    const d = 0.03, vb = [office.lng - d, office.lat + d, office.lng + d, office.lat - d].join(",");
+    const num = (addr.match(/(\d+(?:-\d+)?)\s*$/) || [])[1] || "";
+    const tries = [addr, ...(/서울/.test(addr) ? [] : [`서울 ${addr}`]), addr.replace(/\s*\d+(-\d+)?\s*$/, "")].filter((x, i, a) => x && a.indexOf(x) === i);
+    for (const q of tries) {
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&accept-language=ko&countrycodes=kr&limit=5&viewbox=${vb}&q=${encodeURIComponent(q)}`);
+        const j = await r.json();
+        if (!j.length) continue;
+        const hit = j.find((x) => num && x.address?.house_number === num) || j[0];
+        const a = hit.address || {};
+        return { lat: +hit.lat, lng: +hit.lon, exact: !!num && a.house_number === num,
+          label: [a.road || a.quarter || a.suburb, a.house_number].filter(Boolean).join(" ") || String(hit.display_name).split(",").slice(0, 2).join(" ") };
+      } catch {}
+    }
+    return null;
+  }
+
+  // 좌표 → 가까운 도로명 주소 (지도에서 직접 찍었을 때 주소칸 자동 채우기)
+  async function reverse(lat, lng) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ko&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`);
+      const a = (await r.json()).address || {};
+      return [a.road, a.house_number].filter(Boolean).join(" ") || "";
+    } catch { return ""; }
+  }
+
+  window.MapKit = { init, add, focus, zoom, home, setAdding, search, geocode, reverse, showRoute, clearRoute, fitRoute, attribution: "" };
 })();
