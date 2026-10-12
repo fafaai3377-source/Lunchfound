@@ -65,6 +65,7 @@
         const snap = await F.getDocs(F.query(F.collection(db, "photos"), F.where("placeId", "==", placeId)));
         return toArr(snap).sort((a, b) => b.createdAt - a.createdAt);
       },
+      deletePhoto: (id) => F.deleteDoc(F.doc(db, "photos", id)),
       async deletePhotosOf(field, value) {
         const snap = await F.getDocs(F.query(F.collection(db, "photos"), F.where(field, "==", value)));
         await Promise.all(snap.docs.map((d) => F.deleteDoc(d.ref).catch(() => {})));
@@ -128,6 +129,7 @@
       async addPhoto(d) { data.photos.push({ id: id(), ...d, createdAt: Date.now() }); try { save(); } catch { data.photos.pop(); throw new Error("미리보기 저장 공간이 부족해요"); } },
       async listPhotos(pid) { return data.photos.filter((x) => x.placeId === pid).sort((a, b) => b.createdAt - a.createdAt); },
       async deletePhotosOf(field, value) { data.photos = data.photos.filter((x) => x[field] !== value); save(); },
+      async deletePhoto(pid) { data.photos = data.photos.filter((x) => x.id !== pid); save(); },
       async deleteReview(rid) { data.reviews = data.reviews.filter((r) => r.id !== rid); save(); },
       async addMeetup(d) { const i = id(); data.meetups.push({ id: i, date: today(), ...d, joined: {}, createdAt: Date.now() }); save(); return i; },
       async joinMeetup(mid, user) {

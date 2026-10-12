@@ -23,6 +23,9 @@
   const WAIT_S = { none: "없음", ten: "10분", twenty: "20분+" };
   const SOLO = { ok: "혼자 OK", meh: "혼자 애매", no: "혼자 어려움" };
   const SOLO_S = { ok: "OK", meh: "애매", no: "어려움" };
+  // 추천 포인트: 기록할 때 여러 개 고르는 한 단어 태그 (가게 화면·핀 카드에 많이 고른 순으로 표시)
+  const PICKS = { value: "💰 가성비", amount: "🍚 양 많아요", fast: "⚡ 빨리 나와요", taste: "😋 맛 보장", quiet: "🤫 조용해요", group: "👥 여럿이 좋아요", spicy: "🌶 매워요", hangover: "🍲 해장 추천" };
+  const MAX_PICKS = 3;
   // 대표 카테고리와 이모지 (핀·칩·썸네일에 같이 씀)
   const CAT_EMOJI = { 한식: "🍚", 고기: "🥩", 면: "🍜", 일식: "🍣", 중식: "🥟", 아시안: "🍛", 양식: "🍝", 분식: "🍢", 카페: "☕", 기타: "🍴" };
   const CATS = Object.keys(CAT_EMOJI);
@@ -95,6 +98,8 @@
       minPrice: priced.length ? Math.min(...priced.map((r) => r.price)) : 0,
       week: visited.filter((r) => Date.now() - r.createdAt < 7 * 864e5).length,   // 지난 7일 동안 다녀온 기록 수
       walk: walkMin(p.lat, p.lng),
+      picks: Object.entries(visited.flatMap((r) => r.picks || []).reduce((c, k) => (PICKS[k] && (c[k] = (c[k] || 0) + 1), c), {})).sort((a, b) => b[1] - a[1]),
+      memo: rs.find((r) => r.memo)?.memo || "",
     };
   }
   const anyFilter = () => Object.values(state.filters).some(Boolean) || (state.tab === "list" && !!state.cat);
@@ -177,10 +182,35 @@
     const thumb = await shrinkImage(file, 200, 0.6);
     return { full, thumb };
   }
-  function openLightbox(src) {
+  // 사진 크게 보기: 여러 장이면 좌우 버튼·밀기·방향키로 넘김 (메뉴판은 여러 장인 경우가 많음)
+  function openLightbox(srcs, start = 0, caption = "") {
+    const list = Array.isArray(srcs) ? srcs : [srcs];
+    let i = start;
     const d = document.createElement("div");
-    d.className = "lightbox"; d.innerHTML = `<img src="${esc(src)}" alt="멤버 사진" /><button aria-label="닫기">✕</button>`;
-    d.onclick = () => d.remove(); document.body.appendChild(d);
+    d.className = "lightbox";
+    const draw = () => {
+      d.innerHTML = `<img src="${esc(list[i])}" alt="${esc(caption || "사진")}" />
+        ${list.length > 1 ? `<button class="lb-prev" aria-label="이전">‹</button><button class="lb-next" aria-label="다음">›</button><span class="lb-n">${caption ? `${esc(caption)} · ` : ""}${i + 1} / ${list.length}</span>` : caption ? `<span class="lb-n">${esc(caption)}</span>` : ""}
+        <button class="lb-x" aria-label="닫기">✕</button>`;
+      const pv = $(".lb-prev", d), nx = $(".lb-next", d);
+      if (pv) pv.onclick = (e) => { e.stopPropagation(); i = (i - 1 + list.length) % list.length; draw(); };
+      if (nx) nx.onclick = (e) => { e.stopPropagation(); i = (i + 1) % list.length; draw(); };
+      $("img", d).onclick = (e) => e.stopPropagation();
+    };
+    const close = () => { d.remove(); document.removeEventListener("keydown", key); };
+    const key = (e) => { if (e.key === "Escape") close(); else if (e.key === "ArrowRight" && list.length > 1) { i = (i + 1) % list.length; draw(); } else if (e.key === "ArrowLeft" && list.length > 1) { i = (i - 1 + list.length) % list.length; draw(); } };
+    let sx = null;
+    d.addEventListener("touchstart", (e) => (sx = e.touches[0].clientX), { passive: true });
+    d.addEventListener("touchend", (e) => { if (sx == null || list.length < 2) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 50) { i = (i + (dx < 0 ? 1 : -1) + list.length) % list.length; draw(); } });
+    d.onclick = close; document.addEventListener("keydown", key);
+    draw(); document.body.appendChild(d);
+  }
+  // 메뉴판 사진: 글씨가 읽히게 크게 (최대 1600px), 저장 한도(1MB) 안으로
+  async function prepareMenuPhoto(file) {
+    let full = await shrinkImage(file, 1600, 0.8);
+    if (full.length > 900000) full = await shrinkImage(file, 1280, 0.72);
+    if (full.length > 900000) full = await shrinkImage(file, 1100, 0.62);
+    return full;
   }
 
   // ───────── 대표 이미지 (블로그) ─────────
@@ -287,6 +317,8 @@
       <div class="tip-r"><span>대표 메뉴</span><b>${menu ? esc(menu) : "아직 기록 없음"}</b></div>
       <div class="tip-r"><span>사옥에서</span><b>걸어서 ${wi.min}분${dist}</b></div>
       ${st.count ? `<div class="tip-r"><span>멤버 별점</span><b><i class="star">★</i> ${st.avg.toFixed(1)} (${st.count})${st.wait ? ` · 웨이팅 ${WAIT_S[st.wait]}` : ""}${st.price ? ` · ${won(st.price)}` : ""}</b></div>` : `<div class="tip-foot">아직 멤버 기록이 없어요${pinned ? "" : " · 눌러서 자세히 보기"}</div>`}
+      ${st.picks.length ? `<div class="tip-picks">${st.picks.slice(0, 3).map(([k]) => `<span>${PICKS[k]}</span>`).join("")}</div>` : ""}
+      ${st.memo ? `<div class="tip-memo">“${esc(st.memo)}”</div>` : ""}
       ${pinned ? `<div class="tip-act"><button class="tip-more" data-tip-more>자세히 보기 ›</button></div>` : ""}`;
     if (pinned) $("[data-tip-more]", tip).onclick = (e) => { e.stopPropagation(); hideTip(); openPlace(p.id); };
     const r = el.querySelector(".pin-b").getBoundingClientRect();
@@ -441,9 +473,11 @@
         <div class="stars-s">${"★".repeat(r.rating)}<span style="color:var(--fill-2)">${"★".repeat(5 - r.rating)}</span></div>
         <div class="tags">${r.wait ? `<span class="tag">${WAIT[r.wait]}</span>` : ""}${r.solo ? `<span class="tag">${SOLO[r.solo]}</span>` : ""}${r.price ? `<span class="tag">${won(r.price)}</span>` : ""}</div>
         ${r.menu ? `<div class="review-menu">추천 메뉴 <b>${esc(r.menu)}</b></div>` : ""}
+        ${(r.picks || []).length ? `<div class="tags">${r.picks.filter((k) => PICKS[k]).map((k) => `<span class="tag pick">${PICKS[k]}</span>`).join("")}</div>` : ""}
+        ${r.memo ? `<p class="review-memo">${esc(r.memo)}</p>` : ""}
         ${r.thumb ? `<button class="review-ph" data-rph="${esc(r.id)}" aria-label="사진 크게 보기"><img src="${r.thumb}" alt="" />${r.photoCount > 1 ? `<span>+${r.photoCount - 1}</span>` : ""}</button>` : ""}
         ${r.uid === me || isAdmin() ? `<button class="del" data-del="${esc(r.id)}">${r.uid === me ? "내 기록 삭제" : "기록 삭제 (관리자)"}</button>` : ""}</div></div>`).join("");
-    const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.uid === me || isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
+    const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.memo ? ` · <span class="wish-memo">“${esc(r.memo)}”</span>` : ""}${r.uid === me || isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
     const hero = img
       ? `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}<div class="hero-cap"><a href="${esc(img.source)}" target="_blank" rel="noopener">${esc(img.from || "블로그")} 사진 ↗</a>${p.images.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}</div></div>`
       : `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}${state.store.demo ? `<div class="hero-cap"><span style="font-size:12px;font-weight:600;color:#fff;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:999px">실제 버전에서는 블로그 대표 사진이 자동으로 들어가요</span></div>` : `<div class="hero-cap"><button data-act="findimg">블로그 사진 찾기</button></div>`}</div>`;
@@ -463,7 +497,10 @@
         <div class="btns"><a class="btn btn-plain" href="${l.naver}" data-dir="naver" target="_blank" rel="noopener">네이버 지도 길찾기</a><a class="btn btn-plain" href="${l.kakao}" data-dir="kakao" target="_blank" rel="noopener">카카오맵 길찾기</a></div>
         <p class="dir-note">출발 ${esc(C.office.mapName || C.office.name)} · 도보 경로로 열려요</p>
       </div>
+      ${st.picks.length ? `<div class="h3">멤버 추천 포인트</div><div class="picks">${st.picks.map(([k, n]) => `<span class="pick-agg">${PICKS[k]}<b>${n}</b></span>`).join("")}</div>` : ""}
       ${wishers}
+      <div class="h3 menu-h">메뉴판<label class="link menu-add"><input type="file" accept="image/*" multiple hidden id="menuIn" />＋ 메뉴판 사진 올리기</label></div>
+      <div class="menu-board" id="menuBoard"><p class="empty" style="padding:4px 0">아직 메뉴판 사진이 없어요. 가게에서 찍어두면 다음 사람이 메뉴 고르기 쉬워요.</p></div>
       <div class="gallery" id="gallery" hidden></div>
       <div class="h3">멤버 기록 ${st.count}</div>
       ${reviews || `<p class="empty" style="padding:8px 0">아직 가본 멤버의 기록이 없어요. 다녀왔다면 첫 기록을 남겨주세요.</p>`}
@@ -478,20 +515,42 @@
     const fi = $("[data-act=findimg]", s); if (fi) fi.onclick = async () => { fi.textContent = "찾는 중…"; await loadImages(p); if (!curImage(placeById(p.id))) fi.textContent = "사진을 찾지 못했어요"; };
     $$("[data-del]", s).forEach((b) => (b.onclick = async () => { if (!confirm("이 기록을 삭제할까요?")) return; await state.store.deleteReview(b.dataset.del); state.store.deletePhotosOf?.("reviewId", b.dataset.del); toast("삭제했어요"); }));
     // 멤버 사진: 가게를 열 때만 원본을 불러와서 사진 모음 + 상단 대표 사진으로
-    if (st.visited.some((r) => r.photoCount) && state.store.listPhotos) {
-      state.store.listPhotos(p.id).then((list) => {
-        const g = $("#gallery", s); if (!g || !list.length || state.selected !== p.id) return;
-        g.innerHTML = `<div class="h3" style="margin-top:0">멤버 사진 ${list.length}</div><div class="gallery-row">${list.map((ph, i) => `<button class="gal" data-gal="${i}"><img src="${ph.data}" alt="" loading="lazy" />${ph.menu ? `<span>${esc(ph.menu)}</span>` : ""}</button>`).join("")}</div>`;
+    const loadPhotos = () => state.store.listPhotos ? state.store.listPhotos(p.id).then((all) => {
+        if (state.selected !== p.id || state.sheet !== "place") return;
+        const menus = all.filter((x) => x.kind === "menu"), list = all.filter((x) => x.kind !== "menu");
+        const mb = $("#menuBoard", s);
+        if (mb && menus.length) {
+          mb.innerHTML = `<div class="gallery-row">${menus.map((ph, i) => `<div class="menu-ph"><button class="gal menu" data-mb="${i}"><img src="${ph.data}" alt="메뉴판 ${i + 1}" /></button><div class="menu-by">${esc(ph.userName || "멤버")}님 · ${ago(ph.createdAt)}${ph.uid === me || isAdmin() ? ` · <button class="link danger" data-mb-del="${esc(ph.id)}">삭제</button>` : ""}</div></div>`).join("")}</div>`;
+          $$("[data-mb]", mb).forEach((b) => (b.onclick = () => openLightbox(menus.map((x) => x.data), +b.dataset.mb, `${p.name} 메뉴판`)));
+          $$("[data-mb-del]", mb).forEach((b) => (b.onclick = async () => { if (!confirm("이 메뉴판 사진을 삭제할까요?")) return; await state.store.deletePhoto(b.dataset.mbDel); toast("삭제했어요"); loadPhotos(); }));
+        }
+        const g = $("#gallery", s); if (!g || !list.length) return;
+        g.innerHTML = `<div class="h3" style="margin-top:0">멤버 사진 ${list.length}</div><div class="gallery-row">${list.map((ph, i) => `<button class="gal" data-gal="${i}"><img src="${ph.data}" alt="" />${ph.menu ? `<span>${esc(ph.menu)}</span>` : ""}</button>`).join("")}</div>`;
         g.hidden = false;
-        $$("[data-gal]", g).forEach((b) => (b.onclick = () => openLightbox(list[+b.dataset.gal].data)));
-        $$("[data-rph]", s).forEach((b) => (b.onclick = () => { const ph = list.find((x) => x.reviewId === b.dataset.rph); if (ph) openLightbox(ph.data); }));
+        $$("[data-gal]", g).forEach((b) => (b.onclick = () => openLightbox(list.map((x) => x.data), +b.dataset.gal)));
+        $$("[data-rph]", s).forEach((b) => (b.onclick = () => { const mine = list.filter((x) => x.reviewId === b.dataset.rph); if (mine.length) openLightbox(mine.map((x) => x.data)); }));
         const hi = $(".hero img", s), hero = $(".hero", s);
         if (hero) {
           if (hi) hi.src = list[0].data; else hero.insertAdjacentHTML("afterbegin", `<img src="${list[0].data}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />`);
           const cap = $(".hero-cap", hero); if (cap) cap.innerHTML = `<span class="hero-who">📷 ${esc(list[0].userName || "멤버")}님 사진${list[0].menu ? ` · ${esc(list[0].menu)}` : ""}</span>`;
         }
-      }).catch(() => {});
-    }
+      }).catch(() => {}) : null;
+    loadPhotos();
+    // 메뉴판 사진 올리기 (누구나, 여러 장)
+    const mi = $("#menuIn", s);
+    if (mi) mi.onchange = async () => {
+      const files = [...mi.files].filter((x) => x.type.startsWith("image/")).slice(0, 6);
+      if (!files.length) return;
+      if (state.store.demo && files.length) toast("미리보기에서는 이 브라우저에만 저장돼요");
+      let ok = 0;
+      for (const file of files) {
+        toast(`메뉴판 올리는 중 ${ok + 1}/${files.length}`);
+        try { await state.store.addPhoto({ placeId: p.id, kind: "menu", reviewId: "", uid: state.user.uid, userName: state.user.name, menu: "", data: await prepareMenuPhoto(file) }); ok++; }
+        catch (e) { console.error(e); toast("이 사진은 올리지 못했어요"); }
+      }
+      if (ok) { toast(`메뉴판 사진 ${ok}장을 올렸어요`); loadPhotos(); }
+      mi.value = "";
+    };
     const ep = $("[data-act=editplace]", s); if (ep) ep.onclick = () => openEditPlace(p);
     const dp = $("[data-act=delplace]", s);
     if (dp) dp.onclick = async () => { if (!confirm("이 장소와 내 기록을 삭제할까요?")) return; for (const r of st.rs) await state.store.deleteReview(r.id); await state.store.deletePhotosOf?.("placeId", p.id); await state.store.deletePlace(p.id); closeSheet(); toast("장소를 삭제했어요"); };
@@ -581,7 +640,7 @@
   function openReviewForm(placeId, status) {
     const p = placeById(placeId); if (!p) return;
     state.selected = placeId;
-    state.form = { status, rating: 0, wait: "", solo: "", menu: "", price: "", photos: [], busy: false };
+    state.form = { status, rating: 0, wait: "", solo: "", menu: "", price: "", picks: [], memo: "", photos: [], busy: false };
     const render = () => {
       const f = state.form, v = f.status === "visited";
       const chips = (k, m) => Object.entries(m).map(([key, label]) => `<button class="chip" data-${k}="${key}" aria-pressed="${f[k] === key}">${label}</button>`).join("");
@@ -594,11 +653,14 @@
           <div class="field"><span class="flabel">혼밥</span><div class="chips">${chips("solo", SOLO)}</div></div>
           <div class="field"><label class="flabel" for="rmenu">추천 메뉴</label><input class="input" id="rmenu" maxlength="40" placeholder="제육 정식" value="${esc(f.menu)}" /></div>
           <div class="field"><label class="flabel" for="rprice">내가 낸 가격 <span class="opt">만원 미만이면 💸 거지맵에 들어가요</span></label><input class="input" id="rprice" inputmode="numeric" maxlength="7" placeholder="9000" value="${esc(f.price)}" /></div>
+          <div class="field"><span class="flabel">추천 포인트 <span class="opt">최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
+          <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택 · 팁, 추천, 주의할 점</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="2층 창가 자리가 넓어요 · 점심 세트에 음료 포함">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
           <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 첫 장이 목록 대표 사진이 돼요</span></span>
             <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
               ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
             <p class="err" id="phErr"></p></div>`
-        : `<div class="field"><label class="flabel" for="rmenu">먹어보고 싶은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="더블 치즈버거" value="${esc(f.menu)}" /></div>`}
+        : `<div class="field"><label class="flabel" for="rmenu">먹어보고 싶은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="더블 치즈버거" value="${esc(f.menu)}" /></div>
+           <div class="field"><label class="flabel" for="rmemo">메모 <span class="opt">선택 · 왜 가고 싶은지, 누구랑 가고 싶은지</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="인스타에서 봤는데 웨이팅 있대요 · 금요일에 같이 가요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>`}
         <div class="stack" style="margin-top:26px"><button class="btn btn-primary btn-block" id="rsave">기록 저장</button></div>
       `, "review");
       $$("[data-status]", s).forEach((b) => (b.onclick = () => { f.status = b.dataset.status; render(); }));
@@ -606,6 +668,14 @@
       $$("[data-wait]", s).forEach((b) => (b.onclick = () => { f.wait = f.wait === b.dataset.wait ? "" : b.dataset.wait; render(); }));
       $$("[data-solo]", s).forEach((b) => (b.onclick = () => { f.solo = f.solo === b.dataset.solo ? "" : b.dataset.solo; render(); }));
       const m = $("#rmenu", s); if (m) m.oninput = () => (f.menu = m.value);
+      const mm = $("#rmemo", s); if (mm) mm.oninput = () => { f.memo = mm.value; $("#rmemoN", s).textContent = `${mm.value.length}/100`; };
+      $$("[data-pick]", s).forEach((b) => (b.onclick = () => {
+        const k = b.dataset.pick;
+        if (f.picks.includes(k)) f.picks = f.picks.filter((x) => x !== k);
+        else if (f.picks.length < MAX_PICKS) f.picks = [...f.picks, k];
+        else { toast(`추천 포인트는 ${MAX_PICKS}개까지 고를 수 있어요`); return; }
+        render();
+      }));
       const pr = $("#rprice", s); if (pr) pr.oninput = () => { pr.value = pr.value.replace(/\D/g, ""); f.price = pr.value; };
       $$("[data-ph-del]", s).forEach((b) => (b.onclick = () => { f.photos.splice(+b.dataset.phDel, 1); render(); }));
       const pi = $("#rphoto", s);
@@ -631,7 +701,7 @@
     const btn = $("#rsave"); btn.disabled = true;
     const photos = v ? f.photos : [];
     try {
-      const rid = await state.store.addReview({ placeId: state.selected, uid: state.user.uid, userName: state.user.name, status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu: f.menu.trim().slice(0, 40), price: v ? Number(f.price) || 0 : 0, thumb: photos[0]?.thumb || "", photoCount: photos.length });
+      const rid = await state.store.addReview({ placeId: state.selected, uid: state.user.uid, userName: state.user.name, status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu: f.menu.trim().slice(0, 40), price: v ? Number(f.price) || 0 : 0, picks: v ? f.picks : [], memo: f.memo.trim().replace(/\s+/g, " ").slice(0, 100), thumb: photos[0]?.thumb || "", photoCount: photos.length });
       for (let i = 0; i < photos.length; i++) {
         btn.textContent = `사진 올리는 중 ${i + 1}/${photos.length}`;
         await state.store.addPhoto({ placeId: state.selected, reviewId: rid, uid: state.user.uid, userName: state.user.name, menu: f.menu.trim().slice(0, 40), data: photos[i].full });
