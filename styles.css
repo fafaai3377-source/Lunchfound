@@ -339,7 +339,11 @@ input { font: inherit; color: inherit; }
 .pin .pin-b { transition: transform 180ms var(--ease-out); }
 
 /* 3) 핀 등장 — 처음 보일 때만 위에서 살짝 떨어지며 튕김, 순서대로 */
-.pin.pop { animation: pinIn 420ms var(--ease-spring) both; animation-delay: var(--d, 0ms); }
+/* 핀 등장: 핀 자체(지도 위치를 transform으로 잡음)는 투명도만, 움직임은 안쪽 말풍선에만 — 위치가 왼쪽 위로 튀지 않게 */
+.pin.pop { animation: pinFade 300ms ease-out backwards; animation-delay: var(--d, 0ms); }
+.pin.pop .pin-b, .pin.pop .pin-t { animation: pinDrop 420ms var(--ease-spring) backwards; animation-delay: var(--d, 0ms); }
+@keyframes pinFade { from { opacity: 0; } }
+@keyframes pinDrop { from { transform: translateY(-14px) scale(.9); } }
 @keyframes pinIn { from { opacity: 0; transform: translateY(-14px) scale(.9); } to { opacity: 1; transform: none; } }
 
 /* 4) 시트 — iOS 서랍 곡선으로 열리고, 닫힐 땐 0.2초 동안 내려가며 사라짐 */

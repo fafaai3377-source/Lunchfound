@@ -557,6 +557,8 @@
   // ───────── 시트 공통 ─────────
   let closeTimer;
   function showSheet(html, kind) {
+    // 가게 상세가 아닌 다른 창(룰렛·약속·내 정보 등)을 열면 지도 위 가게 카드와 경로는 정리
+    if (kind !== "place" && !["review", "editplace"].includes(kind) && !$("#tip")?.hidden) { state.sheet = null; hideTip(); }
     state.sheet = kind;
     const s = $("#sheet");
     clearTimeout(closeTimer); s.classList.remove("closing"); $("#scrim").classList.remove("closing");
