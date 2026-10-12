@@ -56,23 +56,56 @@
   const setAdding = (on) => (map.getCanvas().style.cursor = on ? "crosshair" : "");
 
   // 도보 경로: 흰 테두리 + 파란 선, 사옥에서부터 그려짐
+  // ───────── 도보 경로: 모션그래픽처럼 천천히 그려지는 그라데이션 선 ─────────
+  // 1) 카메라가 경로로 부드럽게 이동 → 2) 사옥에서 가게까지 거리 기준으로 일정하게, ease-in-out으로 그림
+  // 색: 사옥(연한 하늘색) → 가게(진한 파랑) 그라데이션 + 뒤에 은은한 빛 번짐 → 3) 도착지에 물결 한 번
+  const C_FROM = "#9FD0FF", C_TO = "#007AFF", NONE = "rgba(0,122,255,0)";
+  let arrive = null;
   function clearRoute() {
     cancelAnimationFrame(routeAnim);
-    for (const id of ["route-line", "route-casing"]) if (map.getLayer(id)) map.removeLayer(id);
+    for (const id of ["route-glow", "route-line", "route-casing"]) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource("route")) map.removeSource("route");
+    arrive?.remove(); arrive = null;
   }
+  const mix = (a, b, t) => { const h = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)); const x = h(a), y = h(b); return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(",")})`; };
+  // 지금까지 그린 비율 p만큼만 보이게: 0 → 연한색, p → (연한색~파랑 사이 그 지점 색), p 직후부터 투명
+  const grad = (p, from, to) => p <= 0.0005 ? ["interpolate", ["linear"], ["line-progress"], 0, NONE, 1, NONE]
+    : p >= 0.9995 ? ["interpolate", ["linear"], ["line-progress"], 0, from, 1, to]
+    : ["interpolate", ["linear"], ["line-progress"], 0, from, p, to === "#fff" ? "#fff" : mix(from, to, p), Math.min(0.9999, p + 0.0005), NONE, 1, NONE];
+  const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
   function showRoute(path, pad = {}) {
     clearRoute();
     const coords = path.map(([a, o]) => [o, a]);
-    const data = (n) => ({ type: "Feature", geometry: { type: "LineString", coordinates: coords.slice(0, Math.max(2, n)) } });
-    map.addSource("route", { type: "geojson", data: data(2) });
-    map.addLayer({ id: "route-casing", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#fff", "line-width": 9 } });
-    map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#007AFF", "line-width": 5 } });
-    const t0 = performance.now(), D = matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : 600;
-    const step = (now) => { const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3); map.getSource("route")?.setData(data(Math.ceil(e * coords.length))); if (k < 1) routeAnim = requestAnimationFrame(step); };
-    routeAnim = requestAnimationFrame(step);
+    if (coords.length < 2) return;
+    map.addSource("route", { type: "geojson", lineMetrics: true, data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } } });
+    const L = { "line-cap": "round", "line-join": "round" };
+    map.addLayer({ id: "route-glow", type: "line", source: "route", layout: L, paint: { "line-width": 18, "line-blur": 10, "line-opacity": 0.35, "line-gradient": grad(0, C_FROM, C_TO) } });
+    map.addLayer({ id: "route-casing", type: "line", source: "route", layout: L, paint: { "line-width": 10, "line-gradient": grad(0, "#fff", "#fff") } });
+    map.addLayer({ id: "route-line", type: "line", source: "route", layout: L, paint: { "line-width": 5.5, "line-gradient": grad(0, C_FROM, C_TO) } });
+    const set = (p) => {
+      if (!map.getLayer("route-line")) return;
+      map.setPaintProperty("route-line", "line-gradient", grad(p, C_FROM, C_TO));
+      map.setPaintProperty("route-glow", "line-gradient", grad(p, C_FROM, C_TO));
+      map.setPaintProperty("route-casing", "line-gradient", grad(p, "#fff", "#fff"));
+    };
+    // 거리(m)에 비례해서 1.6~2.6초 — 가까운 곳도 너무 빨리 끝나지 않게
+    let meters = 0;
+    for (let i = 1; i < coords.length; i++) meters += new maplibregl.LngLat(...coords[i - 1]).distanceTo(new maplibregl.LngLat(...coords[i]));
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const D = reduce ? 1 : Math.min(2600, 1600 + meters * 1.5), DELAY = reduce ? 0 : 480;
     const b = coords.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
-    map.fitBounds(b, { padding: { top: pad.top || 60, right: pad.right || 40, bottom: pad.bottom || 60, left: pad.left || 40 }, maxZoom: 18, duration: 520 });
+    map.fitBounds(b, { padding: { top: pad.top || 60, right: pad.right || 40, bottom: pad.bottom || 60, left: pad.left || 40 }, maxZoom: 18, duration: reduce ? 0 : 700, essential: true });
+    const t0 = performance.now() + DELAY;
+    const step = (now) => {
+      const k = Math.max(0, Math.min(1, (now - t0) / D));
+      set(easeInOut(k));
+      if (k < 1) { routeAnim = requestAnimationFrame(step); return; }
+      // 도착: 가게 위치에 파란 물결 한 번
+      const el = document.createElement("div"); el.className = "route-arrive";
+      arrive = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(coords[coords.length - 1]).addTo(map);
+      setTimeout(() => { arrive?.remove(); arrive = null; }, 1400);
+    };
+    routeAnim = requestAnimationFrame(step);
   }
 
   // 가게 이름 검색: OpenStreetMap(Nominatim)에서 사옥 주변 2km 안
