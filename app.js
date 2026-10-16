@@ -102,12 +102,29 @@
     return Math.max(1, Math.round((2 * R * Math.asin(Math.sqrt(a)) * 1.3) / 75));
   }
   function most(arr) { const c = {}; let b = null, n = 0; arr.forEach((v) => v && (c[v] = (c[v] || 0) + 1)); for (const k in c) if (c[k] > n) { b = k; n = c[k]; } return b; }
+  // 재방문 기록: 이미 기록을 남긴 곳에 또 갔을 때 남기는 간단한 기록 (별점 없이 먹은 메뉴 · 추천 포인트 · 메모)
+  // 데이터는 기록(reviews)과 같은 곳에 kind: "revisit", rating: 0으로 저장 → 방문 횟수·추천 메뉴·추천 포인트엔 들어가고 별점 평균엔 안 들어감
+  const isRevisit = (r) => r.kind === "revisit";
+  const AGAIN = 3;   // 또간집: 멤버들이 합쳐서 3번 이상 다녀온 곳
+  // 추천 메뉴: 멤버들이 다녀와서 적은 메뉴를 많이 적은 순으로 (별점이 높은 기록의 메뉴에 살짝 가산). "제육, 된장"처럼 여러 개면 나눠서 셈
+  const menuKey = (s) => s.replace(/\s+/g, "").toLowerCase();
+  function topMenus(rs, n = 2) {
+    const c = new Map();
+    for (const r of rs) for (const raw of String(r.menu || "").split(/[,，·\/]/)) {
+      const name = raw.trim().replace(/\s+/g, " "); if (!name) continue;
+      const k = menuKey(name), o = c.get(k) || { name, score: 0 };
+      o.score += 1 + (r.rating || 0) / 10; c.set(k, o);
+    }
+    return [...c.values()].sort((a, b) => b.score - a.score).slice(0, n).map((o) => o.name);
+  }
   function stats(p) {
     const rs = state.reviews.filter((r) => r.placeId === p.id).sort((a, b) => b.createdAt - a.createdAt);
-    const visited = rs.filter((r) => r.status === "visited");
-    const rated = visited.filter((r) => r.rating > 0), priced = visited.filter((r) => r.price > 0);
+    const visited = rs.filter((r) => r.status === "visited"), first = visited.filter((r) => !isRevisit(r));
+    const rated = first.filter((r) => r.rating > 0), priced = visited.filter((r) => r.price > 0);
     return {
-      rs, visited, wish: rs.filter((r) => r.status === "wish"), count: visited.length,
+      // count = 별점 기록 수(처음 다녀온 기록) · visits = 재방문까지 합친 전체 방문 수
+      rs, visited, first, wish: rs.filter((r) => r.status === "wish"), count: first.length, visits: visited.length, revisits: visited.length - first.length,
+      menus: topMenus(visited),
       avg: rated.length ? rated.reduce((s, r) => s + r.rating, 0) / rated.length : 0,
       wait: most(visited.map((r) => r.wait)), solo: most(visited.map((r) => r.solo)),
       price: priced.length ? Math.round(priced.reduce((s, r) => s + r.price, 0) / priced.length / 500) * 500 : 0,
@@ -123,11 +140,21 @@
     const full = Math.floor(v), half = v - full >= 0.5 ? 1 : 0;
     return "★".repeat(full) + (half ? `<span class="half-star">★</span>` : "") + `<span style="color:var(--fill-2)">${"★".repeat(5 - full - half)}</span>`;
   }
-  const anyFilter = () => state.cats.length > 0;
+  // 멤버 보기: 멤버를 고르면 지도 핀도 그 멤버가 다녀온 곳(또는 가고 싶은 곳)만
+  const whoOn = () => (state.tab === "member" && state.who ? state.who : null);
+  let whoMemo = { key: "", set: new Set() };
+  function whoPlaceIds() {
+    const who = whoOn(), st = state.whoTab === "wish" ? "wish" : "visited", key = `${who}|${st}|${state.reviews.length}|${state.reviews[0]?.id || ""}`;
+    if (whoMemo.key !== key || whoMemo.src !== state.reviews) whoMemo = { key, src: state.reviews, set: new Set(state.reviews.filter((r) => r.userName === who && r.status === st).map((r) => r.placeId)) };
+    return whoMemo.set;
+  }
+  const anyFilter = () => state.cats.length > 0 || !!whoOn();
   // 특별 카테고리 — 혼밥: 멤버 기록이 대부분 "혼자 OK" / 거지맵: 멤버가 만원 미만으로 먹은 기록이 있는 곳
   const SPECIAL = {
     "@solo": { label: "🍙 혼밥", test: (st) => st.solo === "ok" },
     "@cheap": { label: "💸 거지맵", test: (st, p) => (p?.category || "") !== "카페" && st.minPrice > 0 && st.minPrice < (C.cheapPrice || 10000) },   // 카페는 밥이 아니라서 거지맵에서 제외
+    // 또간집: 멤버들 방문(재방문 포함)이 합쳐서 3번 이상인 밥집 — 카페는 제외
+    "@again": { label: "🔁 또간집", test: (st, p) => (p?.category || "") !== "카페" && st.visits >= AGAIN },
   };
   const inCat = (x, cat) => (SPECIAL[cat] ? SPECIAL[cat].test(x.st, x.p) : (x.p.category || "기타") === cat);
   // 정렬: 인기(멤버가 다녀온 기록 수 + 가고 싶어요 수) → 별점 → 가까운 순으로 동점 처리
@@ -143,6 +170,7 @@
     const f = state.filters;
     // 공통 필터(상단 칩): 고른 것 중 하나라도 맞으면 보여줌 — 지도 핀·추천·전체 목록에 똑같이 적용
     if (p && state.cats.length && !state.cats.some((c) => inCat({ p, st }, c))) return false;
+    if (p && whoOn() && !whoPlaceIds().has(p.id)) return false;
     if (f.solo && st.solo !== "ok") return false;
     if (f.wait && st.wait !== "none") return false;
     if (f.cheap && !(st.price > 0 && st.price <= C.cheapPrice)) return false;
@@ -416,16 +444,11 @@
   // ───────── 마우스 올리면 뜨는 정보 카드 (메뉴 · 도보 시간 · 카테고리) ─────────
   const canHover = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
   let tipShownAt = 0, tipPinned = null;
-  function topMenu(p, st) {
-    const c = {};
-    st.visited.filter((r) => r.menu).forEach((r) => { const k = r.menu.trim(); c[k] = (c[k] || 0) + 1 + (r.rating || 0) / 10; });
-    return Object.entries(c).sort((x, y) => y[1] - x[1])[0]?.[0] || p.note || "";
-  }
   // 정보 카드 — 왼쪽 대표 음식 사진 썸네일 + 오른쪽 정보 (PC 호버·모바일 탭 공통 디자인)
   // pinned=false: PC 마우스 호버 미리보기(핀 근처) / pinned=true: 모바일 탭 → 화면 위쪽에 가로로 꽉 차게 + "자세히 보기"
   function showTip(p, el, pinned = false) {
     if ((!pinned && !canHover()) || state.adding) return;
-    const st = stats(p), wi = walkInfo(p.lat, p.lng), menu = topMenu(p, st), tip = $("#tip");
+    const st = stats(p), wi = walkInfo(p.lat, p.lng), tip = $("#tip");
     const dist = wi.m ? ` · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}` : "";
     const photo = curImage(p)?.image || memberThumb(p) || "";
     tipPinned = pinned ? p.id : null;
@@ -435,7 +458,8 @@
         <div class="tc-body">
           <div class="tc-name">${esc(p.name)}</div>
           <div class="tc-line">${esc(p.category || "기타")} · <b>도보 ${wi.min}분</b>${dist}</div>
-          <div class="tc-line">${st.count ? `<i class="star">★</i> <b>${st.avg.toFixed(1)}</b> (${st.count})` : "아직 기록 없음"}${menu ? ` · ${esc(menu)}` : ""}</div>
+          <div class="tc-line">${st.count ? `<i class="star">★</i> <b>${st.avg.toFixed(1)}</b> (${st.count})` : "아직 기록 없음"}${st.visits >= 2 ? ` · 🔁 방문 ${st.visits}번` : ""}</div>
+          ${st.menus.length ? `<div class="tc-line tc-menu"><span class="k">추천 메뉴</span> ${st.menus.map((m) => `<b>${esc(m)}</b>`).join(" · ")}</div>` : ""}
           ${st.picks.length ? `<div class="tc-picks">${st.picks.slice(0, 3).map(([k]) => `<span>${PICKS[k]}</span>`).join("")}</div>` : ""}
         </div>
       </div>
@@ -525,6 +549,7 @@
   function rowHTML({ p, st }, rank) {
     const meta = [];
     meta.push(st.count ? `<span class="rate"><i>★</i> ${st.avg.toFixed(1)} <span style="color:var(--ink-2);font-weight:400">(${st.count})</span></span>` : st.wish.length ? `<span>♡ 가고 싶은 멤버 ${st.wish.length}</span>` : `<span>아직 기록 없음</span>`);
+    if (st.visits >= 2) meta.push(`<span class="again">🔁 방문 ${st.visits}번</span>`);
     meta.push(`<span>${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}</span>`);
     if (st.wait) meta.push(`<span>웨이팅 ${WAIT_S[st.wait]}</span>`);
     if (st.count && st.wish.length) meta.push(`<span>♡ ${st.wish.length}</span>`);   // 기록 없는 곳은 앞에 "가고 싶은 멤버 N"이 이미 있음
@@ -556,6 +581,8 @@
       }
       const sub = state.sort === "price" ? "멤버가 낸 가격이 낮은 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
       html = `<div class="section-h">${anyFilter() ? `${esc(filterLabel())} ` : "전체 "}${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${body2}`;
+    } else if (state.tab === "member") {
+      html = state.who ? whoHTML(state.who) : membersHTML();
     } else {
       // 내 기록: 내가 등록한(다녀온 기록) / 내가 찜한(♥)
       const all2 = state.places.map((p) => ({ p, st: stats(p) }));
@@ -572,7 +599,7 @@
           (im.places ? `<div class="impact"><span class="impact-n">${im.viewers}</span><span>${im.viewers ? `내 기록 ${im.places}곳 · 멤버 <b>${im.viewers}명</b>이 봤어요` : `내 기록 ${im.places}곳 · 아직 본 멤버 없음`}</span></div>` : "") +
           (mine.length ? mine.map((r) => { const p = placeById(r.placeId); if (!p) return "";
             return `<button class="row" data-place="${esc(p.id)}">${thumbHTML(p)}<div class="row-main"><div class="row-name">${esc(p.name)}</div>
-              <div class="row-meta"><span class="rate"><i>★</i> ${r.rating}</span>${r.menu ? `<span>${esc(r.menu)}</span>` : ""}<span>${ago(r.createdAt)}</span></div></div><span class="row-side">${heartHTML(p.id)}</span></button>`; }).join("")
+              <div class="row-meta">${isRevisit(r) ? `<span class="again">🔁 재방문</span>` : `<span class="rate"><i>★</i> ${r.rating}</span>`}${r.menu ? `<span>${esc(r.menu)}</span>` : ""}<span>${ago(r.createdAt)}</span></div></div><span class="row-side">${heartHTML(p.id)}</span></button>`; }).join("")
             : `<p class="empty">아직 남긴 기록이 없어요.</p>`);
       }
     }
@@ -580,7 +607,80 @@
     $$("[data-place]", body).forEach((b) => (b.onclick = () => openPlace(b.dataset.place)));
     $$("[data-sort]", body).forEach((b) => (b.onclick = () => { state.sort = b.dataset.sort; renderPanel(); }));
     $$("[data-mt]", body).forEach((b) => (b.onclick = () => { state.mineTab = b.dataset.mt; renderPanel(); }));
+    $$("[data-who]", body).forEach((b) => (b.onclick = () => showWho(b.dataset.who || null)));
+    $$("[data-wt]", body).forEach((b) => (b.onclick = () => { state.whoTab = b.dataset.wt; renderPanel(); stagger(); renderMarkers(); }));
     bindFav(body);
+    syncWhoBadge();
+  }
+
+  // ───────── 멤버 보기: 멤버별로 다녀온 곳 · 자주 간 곳 · 가고 싶은 곳 ─────────
+  function memberSummary(name) {
+    const rs = state.reviews.filter((r) => r.userName === name && placeById(r.placeId));
+    const vis = rs.filter((r) => r.status === "visited"), wish = rs.filter((r) => r.status === "wish");
+    const per = new Map();   // 가게별 방문 횟수 · 마지막 방문 · 별점(처음 기록) · 최근 메뉴
+    for (const r of vis.sort((a, b) => b.createdAt - a.createdAt)) {
+      const o = per.get(r.placeId) || { id: r.placeId, n: 0, last: r.createdAt, rating: 0, menu: "" };
+      o.n++; if (!isRevisit(r) && r.rating) o.rating = r.rating; if (!o.menu && r.menu) o.menu = r.menu;
+      per.set(r.placeId, o);
+    }
+    const places = [...per.values()].sort((a, b) => b.n - a.n || b.last - a.last);
+    const rated = vis.filter((r) => !isRevisit(r) && r.rating > 0);
+    return {
+      vis, wish, places, visits: vis.length, last: vis[0]?.createdAt || 0,
+      avg: rated.length ? rated.reduce((s, r) => s + r.rating, 0) / rated.length : 0,
+      cat: most(vis.map((r) => placeById(r.placeId)?.category).filter((c) => c && c !== "기타")),
+      fav: places[0] && places[0].n >= 2 ? placeById(places[0].id) : null,
+    };
+  }
+  function membersHTML() {
+    const me = state.user.name;
+    const list = MEMBERS.map((m) => ({ m, s: memberSummary(m.name) })).sort((a, b) => b.s.visits - a.s.visits || b.s.places.length - a.s.places.length || b.s.last - a.s.last);
+    return `<div class="section-h">멤버 ${list.length}명</div><div class="section-sub">다녀온 기록이 많은 순 · 누르면 그 멤버가 간 곳을 지도와 목록으로 보여줘요</div>` +
+      list.map(({ m, s }) => `<button class="row member-row" data-who="${esc(m.name)}">${avatar(m.name)}
+        <div class="row-main"><div class="row-name">${esc(m.name)}${m.name === me ? ` <span class="me-tag">나</span>` : ""} <span class="team">${esc(m.team || "")}</span></div>
+          <div class="row-meta">${s.visits ? `<span><b>${s.places.length}</b>곳</span><span>방문 ${s.visits}번</span>${s.fav ? `<span class="again">🔁 ${esc(s.fav.name)} ${s.places[0].n}번</span>` : s.cat ? `<span>${esc(catLabel(s.cat))}</span>` : ""}` : `<span>아직 다녀온 기록 없음</span>`}${s.wish.length ? `<span>♡ ${s.wish.length}</span>` : ""}</div></div>
+        <span class="row-side"><span class="row-walk">${s.last ? ago(s.last) : ""}</span></span></button>`).join("");
+  }
+  function whoHTML(name) {
+    const s = memberSummary(name), m = member(name), wt = state.whoTab === "wish" ? "wish" : "visited", nim = name === state.user.name ? "내가" : `${esc(name)}님이`;
+    const head = `<button class="link who-back" data-who="">‹ 멤버 목록</button>
+      <div class="who-head">${avatar(name)}<div><div class="section-h">${esc(name)}님</div><div class="section-sub">${esc([m?.team, m?.role].filter(Boolean).join(" · "))}</div></div></div>
+      <div class="stats who-stats">
+        <div class="stat"><div class="k">다녀온 곳</div><div class="v">${s.places.length}곳</div></div>
+        <div class="stat"><div class="k">방문</div><div class="v">${s.visits}번</div></div>
+        <div class="stat"><div class="k">준 별점</div><div class="v">${s.avg ? `★ ${s.avg.toFixed(1)}` : "–"}</div></div>
+        <div class="stat"><div class="k">자주 먹는</div><div class="v">${s.cat ? esc(s.cat) : "–"}</div></div>
+      </div>
+      <div class="seg sortbar" role="group" aria-label="멤버 기록 보기"><button data-wt="visited" aria-pressed="${wt === "visited"}">자주 간 곳 ${s.places.length}</button><button data-wt="wish" aria-pressed="${wt === "wish"}">♡ 가고 싶은 곳 ${s.wish.length}</button></div>`;
+    if (wt === "wish") {
+      const rows = s.wish.sort((a, b) => b.createdAt - a.createdAt).map((r) => { const p = placeById(r.placeId), st = stats(p);
+        return `<button class="row" data-place="${esc(p.id)}">${thumbHTML(p)}<div class="row-main"><div class="row-name">${esc(p.name)}</div>
+          <div class="row-meta">${st.count ? `<span class="rate"><i>★</i> ${st.avg.toFixed(1)}</span>` : ""}<span>${esc(p.category || "기타")}</span>${r.menu ? `<span>${esc(r.menu)}</span>` : ""}${r.memo ? `<span>“${esc(r.memo)}”</span>` : ""}</div></div>
+          <span class="row-side"><span class="row-walk">도보 ${st.walk}분</span>${heartHTML(p.id)}</span></button>`; }).join("");
+      return head + `<p class="who-note">🗺 지도에도 ${nim} 가고 싶은 곳만 보여요</p>` + (rows || `<p class="empty">아직 찜한 곳이 없어요.</p>`);
+    }
+    const rows = s.places.map((o, i) => { const p = placeById(o.id), st = stats(p);
+      return `<button class="row" data-place="${esc(p.id)}"><span class="rank">${i + 1}</span>${thumbHTML(p)}<div class="row-main"><div class="row-name">${esc(p.name)}</div>
+        <div class="row-meta">${o.n >= 2 ? `<span class="again">🔁 ${o.n}번</span>` : `<span>1번</span>`}${o.rating ? `<span class="rate"><i>★</i> ${(+o.rating).toFixed(1)}</span>` : ""}${o.menu ? `<span>${esc(o.menu)}</span>` : ""}<span>${ago(o.last)}</span></div></div>
+        <span class="row-side"><span class="row-walk">도보 ${st.walk}분</span>${heartHTML(p.id)}</span></button>`; }).join("");
+    return head + (s.places.length ? `<p class="who-note">🗺 지도에도 ${nim} 다녀온 곳만 보여요 · 많이 간 순</p>` : "") + (rows || `<p class="empty">아직 다녀온 기록이 없어요.</p>`);
+  }
+  // 멤버 고르기(이름 null이면 멤버 목록으로). 가게 기록의 이름을 눌러서 올 때는 탭도 멤버로 바꿈
+  function showWho(name) {
+    state.who = name; state.whoTab = "visited";
+    if (state.tab !== "member") { state.tab = "member"; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x.dataset.tab === "member")); }
+    hideTip(true);
+    renderMarkers(); renderPanel(); stagger();
+    $("#panelBody").scrollTop = 0;
+  }
+  // 지도 위 안내: "태영님이 다녀온 곳만 보는 중 ✕"
+  function syncWhoBadge() {
+    const b = $("#whoBadge"); if (!b) return;
+    const who = whoOn();
+    b.hidden = !who;
+    if (!who) return;
+    b.innerHTML = `${avatar(who, true)}<span>${who === state.user.name ? "내가" : `${esc(who)}님이`} ${state.whoTab === "wish" ? "가고 싶은 곳" : "다녀온 곳"}만 보는 중</span><button aria-label="모든 가게 보기">✕</button>`;
+    $("button", b).onclick = () => showWho(null);
   }
   function stagger() {
     const body = $("#panelBody");
@@ -669,11 +769,16 @@
     const p = placeById(id); if (!p) return closeSheet();
     const st = stats(p), l = links(p), me = state.user.uid, img = curImage(p);
     const mineAny = st.rs.some((r) => r.uid === me), others = st.rs.some((r) => r.uid !== me);
-    const reviews = st.visited.map((r) => `<div class="review">${avatar(r.userName, true)}<div class="review-body">
-        <div class="review-top"><span class="who">${esc(r.userName)}님</span><span class="when">${ago(r.createdAt)}</span></div>
-        <div class="stars-s">${starsTxt(r.rating)}</div>
-        <div class="tags">${r.wait ? `<span class="tag">${WAIT[r.wait]}</span>` : ""}${r.solo ? `<span class="tag">${SOLO[r.solo]}</span>` : ""}${r.price ? `<span class="tag">${won(r.price)}</span>` : ""}</div>
-        ${r.menu ? `<div class="review-menu">추천 메뉴 <b>${esc(r.menu)}</b></div>` : ""}
+    const myFirst = st.first.some((r) => r.uid === me);   // 이미 처음 기록을 남긴 곳이면 → 재방문 기록
+    // 그 멤버의 몇 번째 방문인지 (오래된 기록부터 1, 2, 3…)
+    const nth = (r) => st.visited.filter((x) => x.uid === r.uid && x.createdAt <= r.createdAt).length;
+    const whoBtn = (r) => member(r.userName) ? `<button class="who who-link" data-who-go="${esc(r.userName)}">${esc(r.userName)}님</button>` : `<span class="who">${esc(r.userName)}님</span>`;
+    const reviews = st.visited.map((r) => `<div class="review${isRevisit(r) ? " revisit" : ""}">${avatar(r.userName, true)}<div class="review-body">
+        <div class="review-top">${whoBtn(r)}<span class="when">${ago(r.createdAt)}</span></div>
+        ${isRevisit(r) ? `<div class="tags"><span class="tag again">🔁 재방문 · ${nth(r)}번째</span></div>`
+          : `<div class="stars-s">${starsTxt(r.rating)}</div>
+        <div class="tags">${r.wait ? `<span class="tag">${WAIT[r.wait]}</span>` : ""}${r.solo ? `<span class="tag">${SOLO[r.solo]}</span>` : ""}${r.price ? `<span class="tag">${won(r.price)}</span>` : ""}</div>`}
+        ${r.menu ? `<div class="review-menu">${isRevisit(r) ? "먹은 메뉴" : "추천 메뉴"} <b>${esc(r.menu)}</b></div>` : ""}
         ${(r.picks || []).length ? `<div class="tags">${r.picks.filter((k) => PICKS[k]).map((k) => `<span class="tag pick">${PICKS[k]}</span>`).join("")}</div>` : ""}
         ${r.memo ? `<p class="review-memo">${esc(r.memo)}</p>` : ""}
         ${r.thumb ? `<button class="review-ph" data-rph="${esc(r.id)}" aria-label="사진 크게 보기"><img src="${r.thumb}" alt="" />${r.photoCount > 1 ? `<span>+${r.photoCount - 1}</span>` : ""}</button>` : ""}
@@ -685,7 +790,7 @@
           return `<span class="hero-who">${r ? `📷 ${esc(r.userName || "멤버")}님 사진${r.menu ? ` · ${esc(r.menu)}` : ""}` : isAdmin() ? "아직 대표 사진이 없어요" : "기록에 사진을 남기면 여기 보여요"}</span>`; })()}
           <span class="hero-btns">${p.images?.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}${canDelCover ? `<button data-act="delcover">빼기</button>` : ""}${isAdmin() ? `<label class="hero-up"><input type="file" accept="image/*" hidden id="coverIn" />📷 ${img ? "사진 추가" : "대표 사진 올리기"}</label>` : ""}</span></div></div>`;
     const s = showSheet(`
-      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.address && /\d/.test(p.address) ? `<span class="addr-line">📍 ${esc(p.address)}</span>` : ""}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
+      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.address && /\d/.test(p.address) ? `<span class="addr-line">📍 ${esc(p.address)}</span>` : ""}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${st.visits >= 2 ? `<span class="again">🔁 멤버들이 ${st.visits}번 다녀왔어요${st.visits >= AGAIN && p.category !== "카페" ? " · 또간집" : ""}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
       ${hero}
       <div class="stats">
         <div class="stat"><div class="k">별점</div><div class="v">${st.count ? `★ ${st.avg.toFixed(1)}` : "–"}</div></div>
@@ -694,7 +799,7 @@
         <div class="stat"><div class="k">평균</div><div class="v">${st.price ? `${(st.price / 1000).toFixed(st.price % 1000 ? 1 : 0)}천원` : "–"}</div></div>
       </div>
       <div class="stack">
-        <button class="btn btn-primary btn-block" data-act="review">기록 남기기</button>
+        <button class="btn btn-primary btn-block" data-act="review">${myFirst ? "🔁 재방문 기록 남기기" : "기록 남기기"}</button>
         ${mineAny ? "" : `<button class="btn btn-secondary btn-block" data-act="wish">♡ 찜하고 메모 남기기</button>`}
         <button class="btn btn-plain btn-block" data-act="meet">🍽 여기로 오늘 약속 만들기</button>
         <div class="btns"><a class="btn btn-plain" href="${l.naver}" data-dir="naver" target="_blank" rel="noopener">네이버 길찾기</a><a class="btn btn-plain" href="${l.kakao}" data-dir="kakao" target="_blank" rel="noopener">카카오 길찾기</a></div>
@@ -705,13 +810,15 @@
       <div class="h3 menu-h">메뉴판<label class="link menu-add"><input type="file" accept="image/*" multiple hidden id="menuIn" />＋ 메뉴판 사진 올리기</label></div>
       <div class="menu-board" id="menuBoard"><p class="empty" style="padding:4px 0">아직 메뉴판 사진이 없어요. 가게에서 찍어두면 다음 사람이 메뉴 고르기 쉬워요.</p></div>
       <div class="gallery" id="gallery" hidden></div>
-      <div class="h3">멤버 기록 ${st.count}</div>
+      <div class="h3">멤버 기록 ${st.visits}${st.revisits ? `<span class="h3-n">재방문 ${st.revisits}</span>` : ""}</div>
       ${reviews || `<p class="empty" style="padding:8px 0">아직 가본 멤버의 기록이 없어요. 다녀왔다면 첫 기록을 남겨주세요.</p>`}
       ${isAdmin() ? `<div class="admin-tools"><span class="admin-tag">관리자</span><button class="link" data-act="editplace">장소 정보 수정</button><button class="link danger" data-act="delplace">장소와 기록 모두 삭제</button></div>`
         : p.createdBy === me && !others ? `<button class="del" data-act="delplace" style="margin-top:18px">이 장소 삭제</button>` : ""}
     `, "place");
     $$("[data-dir]", s).forEach((b) => (b.onclick = (e) => { e.preventDefault(); openDir(b.dataset.dir, p); }));
-    $("[data-act=review]", s).onclick = () => openReviewForm(p.id, "visited");
+    $("[data-act=review]", s).onclick = () => openReviewForm(p.id, myFirst ? "revisit" : "visited");
+    // 기록 쓴 멤버 이름 → 그 멤버가 다녀온 곳 (모바일은 상세를 닫고 목록을 올려서 보여줌)
+    $$("[data-who-go]", s).forEach((b) => (b.onclick = () => { const n = b.dataset.whoGo; if (!desk()) { closeSheet(); setPanel("open"); } showWho(n); }));
     const w = $("[data-act=wish]", s); if (w) w.onclick = () => openReviewForm(p.id, "wish");
     bindFav(s);
     $("[data-act=meet]", s).onclick = () => openMeetForm(p.id);
@@ -962,9 +1069,12 @@
     state.selected = placeId;
     const old = editId ? state.reviews.find((r) => r.id === editId && r.uid === state.user.uid) : null;
     if (editId && !old) return toast("내가 남긴 기록만 수정할 수 있어요");
+    // status "revisit" = 재방문 기록 (저장은 다녀온 기록 + kind: "revisit", 별점 없음)
+    const revisit = old ? isRevisit(old) : status === "revisit";
     state.form = old
-      ? { editId, status: old.status, rating: +old.rating || 0, wait: old.wait || "", solo: old.solo || "", menu: old.menu || "", price: old.price ? String(old.price) : "", picks: [...(old.picks || [])].filter((k) => PICKS[k]), memo: old.memo || "", photos: [], removed: [], busy: !!old.photoCount }
-      : { status, rating: 0, wait: "", solo: "", menu: "", price: "", picks: [], memo: "", photos: [], busy: false };
+      ? { editId, revisit, status: old.status, rating: +old.rating || 0, wait: old.wait || "", solo: old.solo || "", menu: old.menu || "", price: old.price ? String(old.price) : "", picks: [...(old.picks || [])].filter((k) => PICKS[k]), memo: old.memo || "", photos: [], removed: [], busy: !!old.photoCount }
+      : { revisit, status: revisit ? "visited" : status, rating: 0, wait: "", solo: "", menu: "", price: "", picks: [], memo: "", photos: [], busy: false };
+    if (revisit) return renderRevisitForm(p);
     // 수정: 이 기록에 붙은 사진을 불러와서 빼거나 더할 수 있게
     if (old?.photoCount && state.store.listPhotos) state.store.listPhotos(placeId).then((all) => {
       const f = state.form; if (!f || f.editId !== editId) return;
@@ -1030,14 +1140,55 @@
     };
     render();
   }
+  // 재방문 기록 폼: 별점·웨이팅·가격 없이 오늘 먹은 메뉴 · 추천 포인트 · 한 줄 메모만 (전부 선택)
+  function renderRevisitForm(p) {
+    const f = state.form, me = state.user.uid, st = stats(p);
+    const at = f.editId ? state.reviews.find((x) => x.id === f.editId)?.createdAt || 0 : Infinity;
+    const n = st.visited.filter((r) => r.uid === me && r.createdAt <= at).length + (f.editId ? 0 : 1);   // 이번이 몇 번째 방문인지
+    const known = topMenus(st.visited, 6);   // 이 가게에서 멤버들이 적은 메뉴 — 누르면 바로 입력
+    const s = showSheet(`
+      ${head(esc(p.name), `<span class="again">🔁 ${n}번째 방문</span><span>${f.editId ? "재방문 기록 수정" : "별점 없이 간단하게"}</span>`)}
+      <p class="revisit-note">별점은 처음 남긴 기록 그대로 두고, 이번에 먹은 것만 남겨요. 방문이 쌓이면 🔁 또간집과 멤버별 '자주 간 곳'에 반영돼요.</p>
+      <div class="field"><label class="flabel" for="rmenu">오늘 먹은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="${esc(known[0] || "제육 정식")}" value="${esc(f.menu)}" />
+        ${known.length ? `<div class="chips sub quick-menus" aria-label="이 가게에서 멤버들이 먹은 메뉴">${known.map((m) => `<button class="chip" data-qm="${esc(m)}" aria-pressed="${!!f.menu && menuKey(f.menu) === menuKey(m)}">${esc(m)}</button>`).join("")}</div>` : ""}</div>
+      <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
+      <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="이번엔 곱빼기로 · 새 메뉴 나왔어요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
+      <div class="stack" style="margin-top:26px"><button class="btn btn-primary btn-block" id="rsave">${f.editId ? "수정 완료" : "재방문 기록 저장"}</button>${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
+    `, "review");
+    const m = $("#rmenu", s); m.oninput = () => { f.menu = m.value; $$("[data-qm]", s).forEach((b) => b.setAttribute("aria-pressed", !!f.menu && menuKey(f.menu) === menuKey(b.dataset.qm))); };
+    $$("[data-qm]", s).forEach((b) => (b.onclick = () => { f.menu = menuKey(f.menu) === menuKey(b.dataset.qm) ? "" : b.dataset.qm; renderRevisitForm(p); }));
+    const mm = $("#rmemo", s); mm.oninput = () => { f.memo = mm.value; $("#rmemoN", s).textContent = `${mm.value.length}/100`; };
+    $$("[data-pick]", s).forEach((b) => (b.onclick = () => {
+      const k = b.dataset.pick;
+      if (f.picks.includes(k)) f.picks = f.picks.filter((x) => x !== k);
+      else if (f.picks.length < MAX_PICKS) f.picks = [...f.picks, k];
+      else { toast(`추천 포인트는 ${MAX_PICKS}개까지 고를 수 있어요`); return; }
+      renderRevisitForm(p);
+    }));
+    const rd = $("#rdel", s); if (rd) rd.onclick = async () => {
+      if (!confirm("이 재방문 기록을 삭제할까요?")) return;
+      await state.store.deleteReview(f.editId); state.form = null; toast("기록을 삭제했어요"); openPlace(p.id);
+    };
+    $("#rsave", s).onclick = saveReview;
+    $$("[data-close]", s).forEach((b) => (b.onclick = () => openPlace(p.id)));
+  }
   async function saveReview() {
     const f = state.form, v = f.status === "visited";
-    if (v && !f.rating) { $("#rerr").textContent = "별점을 골라주세요."; return; }
+    if (v && !f.revisit && !f.rating) { $("#rerr").textContent = "별점을 골라주세요."; return; }
     if (f.busy) { $("#phErr").textContent = "사진을 준비하고 있어요. 잠시만요."; return; }
     const btn = $("#rsave"); btn.disabled = true;
-    const photos = v ? f.photos : [];
+    const photos = v && !f.revisit ? f.photos : [];
     try {
-      const body = { status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu: f.menu.trim().slice(0, 40), price: v ? Number(f.price) || 0 : 0, picks: v ? f.picks : [], memo: f.memo.trim().replace(/\s+/g, " ").slice(0, 100), photoCount: photos.length };
+      const menu = f.menu.trim().replace(/\s+/g, " ").slice(0, 40), memo = f.memo.trim().replace(/\s+/g, " ").slice(0, 100);
+      const body = f.revisit
+        ? { status: "visited", kind: "revisit", rating: 0, wait: "", solo: "", menu, price: 0, picks: f.picks, memo, photoCount: 0 }
+        : { status: f.status, rating: v ? f.rating : 0, wait: v ? f.wait : "", solo: v ? f.solo : "", menu, price: v ? Number(f.price) || 0 : 0, picks: v ? f.picks : [], memo, photoCount: photos.length };
+      if (f.revisit && !f.editId) {
+        const n = state.reviews.filter((r) => r.placeId === state.selected && r.uid === state.user.uid && r.status === "visited").length + 1;
+        await state.store.addReview({ placeId: state.selected, uid: state.user.uid, userName: state.user.name, ...body, thumb: "" });
+        toast(`🔁 ${n}번째 방문을 남겼어요`);
+        const id = state.selected; state.form = null; openPlace(id); return;
+      }
       if (f.editId) {
         // 수정: 기록 내용 바꾸고 → 뺀 사진 지우고 → 새 사진만 올림 (대표 썸네일은 첫 장 기준으로 다시 만듦)
         const first = photos[0];
@@ -1688,7 +1839,7 @@
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1900); }
 
   function bindUI() {
-    $$("#tabs button").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); setPanel("open"); renderPanel(); stagger(); renderMarkers(); }));
+    $$("#tabs button").forEach((t) => (t.onclick = () => { if (t.dataset.tab === "member") state.who = null; state.tab = t.dataset.tab; $$("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === t)); setPanel("open"); renderPanel(); stagger(); renderMarkers(); }));
     $("#grab").onclick = () => setPanel(panelStage() === "open" ? "min" : "open");
     setPanel("min");   // 처음엔 내린 상태로 지도에 집중
     initPanelSwipe();

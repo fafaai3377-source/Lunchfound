@@ -119,12 +119,15 @@
     </div>
     <button class="fab" id="fab">+ 장소 추가</button>
     <div class="attrib" id="attrib" hidden></div>
+    <!-- 멤버 보기 중: "태영님이 다녀온 곳만 보는 중 ✕" -->
+    <div class="who-badge" id="whoBadge" hidden role="status"></div>
     <div class="badge-demo glass" id="demoBadge" hidden>미리보기 · 이 브라우저에만 저장</div>
 
     <aside class="panel glass" id="panel" data-open="false">
       <button class="grabber" id="grab" aria-label="목록 펼치기"><span></span></button>
       <div class="seg" id="tabs" role="tablist">
         <button role="tab" data-tab="list" aria-selected="true">전체</button>
+        <button role="tab" data-tab="member" aria-selected="false">멤버</button>
         <button role="tab" data-tab="mine" aria-selected="false">내 기록</button>
       </div>
       <div class="panel-body" id="panelBody"></div>

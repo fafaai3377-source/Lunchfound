@@ -806,3 +806,41 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 :root.lite { --glass: var(--canvas); }   /* 유리 배경 → 불투명 (선택된 칩 등 다른 배경은 그대로) */
 /* 지도가 없을 땐 지도 버튼(사옥으로 · 확대 · 축소)도 숨김 */
 .map-off .mapctl { display: none; }
+
+/* ═════════ 재방문 · 또간집 · 멤버 보기 ═════════ */
+/* 방문 횟수 표시 (🔁): 강조색 대신 잉크 굵게 — 파랑은 누르는 것에만 */
+.row-meta .again, .sub .again, .tc-line .again { color: var(--ink); font-weight: 600; }
+.tag.again { background: var(--fill); color: var(--ink); font-weight: 600; }
+.h3-n { margin-left: 8px; font-size: 13px; font-weight: 500; color: var(--ink-3); letter-spacing: 0; }
+.tc-menu .k { color: var(--ink-3); }
+/* 기록 쓴 멤버 이름 → 그 멤버 보기 */
+.who-link { font-weight: 600; color: var(--ink); text-align: left; }
+.who-link::after { content: " ›"; color: var(--ink-3); font-weight: 400; }
+@media (hover: hover) and (pointer: fine) { .who-link:hover { color: var(--accent); } }
+/* 재방문 기록 폼 */
+.revisit-note { margin: 14px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--parchment); font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.quick-menus { margin-top: 8px; }
+/* 멤버 목록 */
+.member-row .avatar { width: 44px; height: 44px; font-size: 17px; }
+.panel-body .member-row + .member-row::before { left: 56px; }
+.member-row .row-name { display: flex; align-items: center; gap: 6px; }
+.member-row .team { margin: 0; }
+.me-tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 9999px; background: var(--ink); color: var(--canvas); letter-spacing: 0; }
+.member-row .row-meta b { color: var(--ink); font-weight: 600; }
+/* 멤버 상세 */
+.who-back { display: inline-block; margin: 12px 0 2px; font-size: 14px; }
+.who-head { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.who-head .avatar { width: 52px; height: 52px; font-size: 20px; }
+.who-head .section-h { margin: 0; }
+.who-head .section-sub { margin: 0; }
+.who-stats { margin: 14px 0 10px; }
+.who-note { margin: 10px 2px 2px; font-size: 12.5px; color: var(--ink-2); }
+/* 지도 위: "태영님이 다녀온 곳만 보는 중 ✕" */
+.who-badge { position: absolute; z-index: 13; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 124px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px);
+  padding: 5px 5px 5px 6px; border-radius: 9999px; background: var(--ink); color: var(--canvas); font-size: 14px; font-weight: 600; box-shadow: var(--shadow-float); white-space: nowrap; animation: chipDrop 320ms var(--ease-spring); }
+.who-badge span:not(.avatar) { overflow: hidden; text-overflow: ellipsis; }
+.who-badge .avatar { border: 1.5px solid var(--canvas); }
+.who-badge button { flex: none; width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.18); color: var(--canvas); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+:root[data-theme="dark"] .who-badge button { background: rgba(0,0,0,.12); }
+@keyframes chipDrop { from { opacity: 0; transform: translate(-50%, -8px); } }
+@media (min-width: 900px) { .who-badge { top: calc(var(--top) + 10px); left: calc(50% + var(--side) / 2); } }
