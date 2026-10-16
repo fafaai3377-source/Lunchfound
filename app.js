@@ -251,16 +251,40 @@
   }
 
   // ───────── 지도 ─────────
-  async function initMap() {
+  // 지도가 못 떴을 때: 이유별 안내 + 다시 시도. 목록·기록·오늘 뭐 먹지는 지도와 상관없이 계속 쓸 수 있음
+  function mapNotice(kind) {
+    $("#map .map-msg")?.remove();
+    const gpu = kind === "NO_WEBGL" || kind === "LOST";
+    // 그래픽 가속이 멈춘 상태에선 화면 흐림(blur) 효과도 매우 느려짐 → 흐림을 끄고 불투명 배경으로 (사이트가 버벅이지 않게)
+    if (gpu) document.documentElement.classList.add("lite");
+    if (kind !== "NO_KAKAO_KEY") document.documentElement.classList.add("map-off");
+    const m = document.createElement("div");
+    m.className = "map-msg";
+    if (kind === "NO_KAKAO_KEY") m.innerHTML = "지도를 띄우려면 <b>config.js</b>에 카카오 JavaScript 키를 넣어주세요.";
+    else {
+      const title = kind === "LOST" ? "지도 그래픽이 잠시 멈췄어요" : gpu ? "지도 그래픽을 켜지 못했어요" : "지도를 불러오지 못했어요";
+      const body = gpu ? "브라우저의 그래픽 가속이 잠깐 멈춘 것 같아요. 새로고침해도 그대로면 Chrome을 완전히 껐다가 다시 켜 주세요."
+        : "지도 서버 연결이 느리거나 잠깐 끊겼어요. 잠시 뒤 다시 시도해 주세요.";
+      m.innerHTML = `<div class="map-err"><b>${title}</b><p>${body}</p><p class="map-err-sub">목록 · 기록 · 오늘 뭐 먹지는 그대로 쓸 수 있어요.</p>
+        <div class="btns">${kind === "LOST" ? "" : `<button class="btn btn-primary" data-map-retry>다시 시도</button>`}<button class="btn btn-plain" data-map-reload>새로고침</button></div></div>`;
+      const rt = $("[data-map-retry]", m); if (rt) rt.onclick = () => { rt.disabled = true; rt.textContent = "불러오는 중…"; initMap(1); };
+      $("[data-map-reload]", m).onclick = () => location.reload();
+    }
+    $("#map").appendChild(m);
+  }
+  // attempt 0: 처음 — 실패하면 1.2초 뒤 한 번 더 자동으로 시도 / attempt 1: 다시 시도 버튼
+  async function initMap(attempt = 0) {
     try {
-      await MapKit.init($("#map"), C.office, onMapTap);
+      await MapKit.init($("#map"), C.office, onMapTap, () => mapNotice("LOST"));
     } catch (e) {
-      const m = document.createElement("div");
-      m.className = "map-msg";
-      m.innerHTML = e.message === "NO_KAKAO_KEY" ? "지도를 띄우려면 <b>config.js</b>에 카카오 JavaScript 키를 넣어주세요." : "카카오맵을 불러오지 못했어요. 키와 등록된 사이트 주소를 확인해 주세요.";
-      $("#map").appendChild(m);
+      const why = e?.message || "";
+      console.warn("[Lunchfound] 지도 실패:", why);
+      if (why !== "NO_KAKAO_KEY" && attempt === 0) { await new Promise((r) => setTimeout(r, 1200)); return initMap(1); }
+      mapNotice(why);
       return;
     }
+    $("#map .map-msg")?.remove();
+    document.documentElement.classList.remove("lite", "map-off");
     state.mapReady = true;
     homeView(true);   // 처음 열 때도 사옥이 보이는 영역 가운데
     if (MapKit.attribution) { const a = $("#attrib"); a.textContent = MapKit.attribution; a.hidden = false; }
@@ -1692,7 +1716,10 @@
     me.innerHTML = `${esc(user.name.charAt(0))}${photoOf(user.name) ? `<img src="${photoOf(user.name)}" alt="" onerror="this.remove()">` : ""}`;
     if (state.store.demo) $("#demoBadge").hidden = false;
     bindUI();
-    await Promise.all([initMap(), window.Walk ? Walk.init(C.office) : null]);
+    // 지도는 따로 준비 — 목록·핀 데이터는 지도 라이브러리·타일을 기다리지 않고 바로 받아서 보여줌
+    // (예전엔 지도가 다 뜰 때까지 목록도 기다려서, 지도 서버가 느리면 사이트 전체가 느려 보였음)
+    initMap();
+    if (window.Walk) await Walk.init(C.office).catch(() => {});
     if (state.store.demo) demoSimulate();
     registerSW();
     initPush();
@@ -1707,7 +1734,8 @@
       onMeetups(meetups || []);
       if (state.pending && places.some((p) => p.id === state.pending.id)) state.pending = null;
       renderAll();
-      if (firstView && state.mapReady) { firstView = false; setTimeout(() => homeView(true), 450); }   // 목록 패널이 자리 잡은 뒤(0.3초 애니메이션)
+      // 첫 데이터 때 한 번만: 지도가 이미 떠 있으면 목록 패널이 자리 잡은 뒤(0.3초) 사옥을 가운데로. 지도가 나중에 뜨면 initMap이 직접 맞춤
+      if (firstView) { firstView = false; if (state.mapReady) setTimeout(() => homeView(true), 450); }
     });
   }
 

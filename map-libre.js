@@ -2,16 +2,38 @@
 // config.js에 kakaoJsKey를 넣으면 자동으로 카카오맵(map-kakao.js)이 쓰여요.
 (function () {
   if (window.CONFIG && window.CONFIG.kakaoJsKey) return;   // 카카오 키가 있으면 아무것도 안 함
-  const CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css";
-  const JS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js";
+  // 지도 라이브러리: 우리 사이트(vendor/)에 둔 파일을 먼저 쓰고, 안 되면 외부 CDN 두 곳에서 차례로 시도
+  // (외부 CDN 하나가 느리거나 막혀도 지도가 안 뜨는 일이 없게)
+  const VER = "4.7.1";
+  const BASES = [`./vendor/maplibre-gl-${VER}/`, `https://cdn.jsdelivr.net/npm/maplibre-gl@${VER}/dist/`, `https://unpkg.com/maplibre-gl@${VER}/dist/`];
   const STYLE = "https://tiles.openfreemap.org/styles/liberty";
-  let map, office, routeAnim = 0;
+  let map, office, routeAnim = 0, libP = null;
 
-  const load = () => new Promise((resolve, reject) => {
-    if (window.maplibregl) return resolve();
-    const l = document.createElement("link"); l.rel = "stylesheet"; l.href = CSS; document.head.appendChild(l);
-    const s = document.createElement("script"); s.src = JS; s.onload = resolve; s.onerror = () => reject(new Error("MAP_LOAD_FAIL")); document.head.appendChild(s);
+  const script = (src, ms) => new Promise((resolve, reject) => {
+    const s = document.createElement("script"); s.src = src;
+    const t = setTimeout(() => { s.onload = s.onerror = null; reject(new Error("TIMEOUT")); }, ms);
+    s.onload = () => { clearTimeout(t); window.maplibregl ? resolve() : reject(new Error("NO_LIB")); };
+    s.onerror = () => { clearTimeout(t); s.remove(); reject(new Error("ERR")); };
+    document.head.appendChild(s);
   });
+  const load = () => libP || (libP = (async () => {
+    for (const base of BASES) {
+      if (window.maplibregl) break;
+      try { await script(base + "maplibre-gl.js", 12000); } catch { continue; }
+      const l = document.createElement("link"); l.rel = "stylesheet"; l.href = base + "maplibre-gl.css"; document.head.appendChild(l);
+    }
+    if (!window.maplibregl) { libP = null; throw new Error("MAP_LOAD_FAIL"); }
+  })());
+
+  // 이 브라우저에서 지도 그래픽(WebGL)을 켤 수 있는지 미리 확인 — 그래픽 가속이 멈춘 상태면 지도를 그릴 수 없음
+  function webglOK() {
+    try {
+      const c = document.createElement("canvas"), gl = c.getContext("webgl2") || c.getContext("webgl");
+      if (!gl) return false;
+      gl.getExtension("WEBGL_lose_context")?.loseContext();   // 확인용으로 만든 건 바로 반납
+      return true;
+    } catch { return false; }
+  }
 
   // 카카오맵과 비슷한 차분한 색 (밝은 바탕 · 베이지 회색 건물 · 흰 도로), 식당 아이콘은 숨김(우리 핀과 겹치지 않게)
   function tint() {
@@ -31,13 +53,33 @@
     }
   }
 
-  async function init(el, center, onTap) {
+  async function init(el, center, onTap, onLost) {
+    office = center;   // 검색·주소 찾기는 지도가 안 떠도 쓸 수 있게 먼저
     await load();
-    office = center;
-    map = new maplibregl.Map({ container: el, style: STYLE, center: [center.lng, center.lat], zoom: 16.5, minZoom: 13, maxZoom: 19.5,
-      attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false });
+    if (!webglOK()) throw new Error("NO_WEBGL");
+    let m;
+    try {
+      m = new maplibregl.Map({ container: el, style: STYLE, center: [center.lng, center.lat], zoom: 16.5, minZoom: 13, maxZoom: 19.5,
+        attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false });
+    } catch (e) { throw new Error(/webgl/i.test(String(e?.message || e)) ? "NO_WEBGL" : "MAP_INIT_FAIL"); }
+    // 지도 스타일·타일 서버가 15초 안에 응답하지 않으면 멈춰 있지 말고 실패로 알림 (다시 시도 버튼이 뜸)
+    try {
+      await new Promise((res, rej) => {
+        const t = setTimeout(() => rej(new Error("MAP_TIMEOUT")), 15000);
+        // 지도 스타일 자체를 못 받으면 15초 기다리지 않고 바로 실패 (스타일을 받은 뒤의 타일 한두 장 실패는 무시)
+        let gotStyle = false;
+        m.once("styledata", () => (gotStyle = true));
+        const onErr = (ev) => { if (gotStyle && !String(ev?.error?.url || "").includes("/styles/")) return; clearTimeout(t); m.off("error", onErr); rej(new Error("MAP_STYLE_FAIL")); };
+        m.on("error", onErr);
+        m.once("load", () => { clearTimeout(t); m.off("error", onErr); res(); });
+      });
+    } catch (e) { try { m.remove(); } catch {} throw e; }
+    map = m;
     map.touchZoomRotate.disableRotation();
-    await new Promise((r) => map.once("load", r));
+    // 쓰는 중에 그래픽이 끊기면(다른 탭이 그래픽을 많이 쓰거나 드라이버가 재시작) 지도가 스스로 복구를 시도 — 4초 안에 못 돌아오면 알림
+    let lostT = 0;
+    map.on("webglcontextlost", () => { clearTimeout(lostT); lostT = setTimeout(() => onLost?.(), 4000); });
+    map.on("webglcontextrestored", () => clearTimeout(lostT));
     tint();
     // PC: 왼쪽 목록(400px)이 가리지 않도록 지도 중심을 오른쪽 영역 가운데로
     const pad = () => map.setPadding({ left: matchMedia("(min-width: 900px)").matches ? 412 : 0, top: 0, right: 0, bottom: 0 });
@@ -46,14 +88,16 @@
     const far = () => el.classList.toggle("far", map.getZoom() < 15.6);
     map.on("zoom", far); far();
   }
+  // 아래 함수들은 지도가 아직 준비 전이거나 못 떴을 때 아무 일도 하지 않음 (목록·기록은 지도와 상관없이 먼저 쓸 수 있음)
   function add(node, lat, lng, anchor = "bottom") {
+    if (!map) return { remove() {}, front() {} };
     const m = new maplibregl.Marker({ element: node, anchor: anchor === "center" ? "center" : "bottom" }).setLngLat([lng, lat]).addTo(map);
     return { remove: () => m.remove(), front: (on) => (node.style.zIndex = on ? 10 : "") };
   }
-  const focus = (lat, lng, offX = 0, offY = 0) => map.easeTo({ center: [lng, lat], offset: [offX, offY], duration: 450 });
-  const zoom = (dir) => map.easeTo({ zoom: map.getZoom() + (dir > 0 ? 1 : -1), duration: 250 });
-  const home = (offY = 0, instant) => map.easeTo({ center: [office.lng, office.lat], zoom: 16.5, offset: [0, offY], duration: instant ? 0 : 600 });   // jumpTo는 offset을 무시해서 easeTo(0초)
-  const setAdding = (on) => (map.getCanvas().style.cursor = on ? "crosshair" : "");
+  const focus = (lat, lng, offX = 0, offY = 0) => map?.easeTo({ center: [lng, lat], offset: [offX, offY], duration: 450 });
+  const zoom = (dir) => map?.easeTo({ zoom: map.getZoom() + (dir > 0 ? 1 : -1), duration: 250 });
+  const home = (offY = 0, instant) => map?.easeTo({ center: [office.lng, office.lat], zoom: 16.5, offset: [0, offY], duration: instant ? 0 : 600 });   // jumpTo는 offset을 무시해서 easeTo(0초)
+  const setAdding = (on) => { if (map) map.getCanvas().style.cursor = on ? "crosshair" : ""; };
 
   // 도보 경로: 흰 테두리 + 파란 선, 사옥에서부터 그려짐
   // ───────── 도보 경로: 모션그래픽처럼 천천히 그려지는 그라데이션 선 ─────────
@@ -62,6 +106,7 @@
   const C_FROM = "#9FD0FF", C_TO = "#007AFF", NONE = "rgba(0,122,255,0)";
   let arrive = null;
   function clearRoute() {
+    if (!map) return;
     cancelAnimationFrame(routeAnim);
     for (const id of ["route-glow", "route-line", "route-casing"]) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource("route")) map.removeSource("route");
@@ -76,11 +121,12 @@
   let lastCoords = null;
   // 이미 그린 경로를 다시 그리지 않고 화면만 맞춤 (모바일: 카드 → 자세히 보기로 시트가 올라올 때)
   function fitRoute(pad = {}) {
-    if (!lastCoords || !map.getLayer("route-line")) return;
+    if (!map || !lastCoords || !map.getLayer("route-line")) return;
     const b = lastCoords.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(lastCoords[0], lastCoords[0]));
     map.fitBounds(b, { padding: { top: pad.top || 60, right: pad.right || 40, bottom: pad.bottom || 60, left: pad.left || 40 }, maxZoom: 18, duration: 500 });
   }
   function showRoute(path, pad = {}) {
+    if (!map) return;
     clearRoute();
     const coords = path.map(([a, o]) => [o, a]);
     lastCoords = coords;

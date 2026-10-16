@@ -16,6 +16,10 @@
   </script>
   <title>Lunchfound</title>
   <meta name="description" content="우리 팀이 직접 가본 사옥 근처 밥집 지도" />
+  <!-- 지도는 스플래시·로그인 확인 동안 미리 받아둠 (라이브러리는 우리 사이트에, 지도 그림은 OpenFreeMap에서) -->
+  <link rel="preload" href="./vendor/maplibre-gl-4.7.1/maplibre-gl.js" as="script" />
+  <link rel="preload" href="./vendor/maplibre-gl-4.7.1/maplibre-gl.css" as="style" />
+  <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
   <!-- 앱으로 설치 (PWA) -->
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg" />

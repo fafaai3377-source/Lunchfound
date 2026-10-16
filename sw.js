@@ -1,6 +1,6 @@
 // Lunchfound 서비스워커 — 앱으로 설치(PWA), 오프라인 대비, 알림 클릭 처리
 // 앱 파일을 고치면 아래 VERSION 숫자만 올려주세요. 다음 접속 때 새 버전으로 바뀌어요.
-const VERSION = "lunchfound-v32";
+const VERSION = "lunchfound-v33";
 const SHELL = ["./", "./index.html", "./styles.css", "./config.js", "./members.js", "./seeds.js", "./store.js", "./walk.js", "./map-kakao.js", "./map-libre.js", "./app.js", "./walk-graph.json", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/favicon.svg", "./brand/logo-black.png", "./brand/logo-white.png", "./brand/mark-black.png"];
 
 self.addEventListener("install", (e) => {
@@ -14,6 +14,14 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
+  // 지도 라이브러리(vendor/, 버전이 폴더 이름에 있어 바뀌지 않음)는 저장해둔 것 먼저 — 두 번째부터는 내려받지 않고 바로
+  if (url.pathname.includes("/vendor/")) {
+    e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
+      return res;
+    })));
+    return;
+  }
   e.respondWith(
     fetch(e.request)
       .then((res) => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); } return res; })
