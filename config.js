@@ -21,7 +21,7 @@ window.CONFIG = {
 
   // 위성 지도(항공사진): 브이월드(vworld.kr) 회원가입 → 오픈API 인증키 발급(무료, 서비스 URL에 이 사이트 주소 등록) → 여기에 붙여넣기
   // 비어 있으면 지도 종류에서 "위성"은 '준비 중'으로 보이고, 그래픽·일반 지도만 쓸 수 있어요
-  vworldKey: "",
+  vworldKey: "BD6DD78F-693B-4811-A701-F8716E611A0C",
 
   // 로그인: 멤버 이름 + 공용 비밀번호 (확인은 서버 함수 api/login.js, 비밀번호 해시는 Vercel 환경변수)
   loginApi: "/api/login",
