@@ -280,7 +280,7 @@
 
   // ───────── 지도 ─────────
   // ───────── 지도 종류: 그래픽 · 일반 · 위성 (오른쪽 아래 지도 버튼 맨 위) ─────────
-  const MAP_MODES = { graphic: "그래픽", normal: "일반", satellite: "위성" };
+  const MAP_MODES = { graphic: "그래픽", satellite: "위성" };   // 일반 지도는 그래픽과 차이가 적어서 빼고 두 가지만
   const savedMapMode = () => { try { return localStorage.getItem("lunchfound-mapmode") || "graphic"; } catch { return "graphic"; } };
   function applyMapMode(m, save) {
     if (!MapKit.setMode) return;

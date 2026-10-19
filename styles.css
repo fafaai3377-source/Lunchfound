@@ -883,7 +883,7 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
   transform-origin: 100% 22px; animation: mmIn 180ms var(--ease-out); }
 @keyframes mmIn { from { opacity: 0; transform: translateX(6px) scale(.96); } }
 .mm-title { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0 2px 8px; }
-.mm-opts { display: grid; grid-template-columns: repeat(3, 64px); gap: 10px; }
+.mm-opts { display: grid; grid-template-columns: repeat(2, 64px); gap: 12px; }
 .mm-opt { display: flex; flex-direction: column; align-items: center; gap: 5px; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
 .mm-thumb { width: 64px; height: 64px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--hair); outline: 2px solid transparent; outline-offset: 2px; transition: outline-color 150ms ease, transform 160ms var(--ease-out); }
 .mm-opt[aria-pressed="true"] .mm-thumb { outline-color: var(--ink); }
@@ -901,14 +901,6 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
   linear-gradient(#E9E6E0, #E9E6E0) 8px 8px / 20px 15px no-repeat,
   linear-gradient(#E9E6E0, #E9E6E0) 40px 42px / 17px 15px no-repeat,
   linear-gradient(#D9ECCF, #D9ECCF) 6px 44px / 16px 13px no-repeat, #F5F4F1; }
-.mm-thumb.normal { background:
-  radial-gradient(circle at 46px 16px, #F4A33A 0 3px, transparent 3.5px),
-  radial-gradient(circle at 18px 34px, #E5566A 0 3px, transparent 3.5px),
-  radial-gradient(circle at 52px 50px, #8C6BD8 0 3px, transparent 3.5px),
-  linear-gradient(118deg, transparent 43%, #F6CF65 43%, #F6CF65 53%, transparent 53%),
-  linear-gradient(28deg, transparent 60%, #fff 60%, #fff 67%, transparent 67%),
-  linear-gradient(#BFDDF5, #BFDDF5) 40px 0 / 24px 12px no-repeat,
-  linear-gradient(#C8E6B5, #C8E6B5) 4px 4px / 22px 18px no-repeat, #F1EEE8; }
 .mm-thumb.satellite { background:
   linear-gradient(118deg, transparent 45%, rgba(255,255,255,.45) 45%, rgba(255,255,255,.45) 50%, transparent 50%),
   radial-gradient(circle at 18% 28%, #6F7F55 0 22%, transparent 23%),
