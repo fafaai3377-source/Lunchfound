@@ -703,9 +703,8 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
   .topbar { display: flex; align-items: center; gap: 8px; }
   .top-row { display: contents; }
   .topbar .brand-pill { order: 0; flex: none; }
-  .topbar .filters { order: 1; flex: 1 1 auto; min-width: 0; margin: 0 0 0 max(0px, calc(var(--side) + 4px - var(--brandW, 200px)));
-    padding: 8px 4px 10px; align-items: center;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .topbar .filters-wrap { order: 1; flex: 1 1 auto; min-width: 0; margin: 0 0 0 max(0px, calc(var(--side) + 4px - var(--brandW, 200px))); }
+  .topbar .filters { margin: 0; padding: 8px 4px 10px; align-items: center; }
   .topbar .roulette-btn, .topbar .meet-btn, .topbar .me { order: 2; flex: none; }
   .topbar .roulette-btn { margin-left: 4px; }
   .panel { top: calc(var(--top) + 10px); }
@@ -854,3 +853,25 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .spin { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid var(--fill-2); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* ═════════ 필터 칩이 넘칠 때: 양쪽 흐림 + (PC) 화살표 · 휠 · 끌기 ═════════ */
+.filters-wrap { position: relative; min-width: 0; }
+/* 더 볼 칩이 있는 쪽만 끝을 흐리게 */
+.filters.more-r { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); }
+.filters.more-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px); mask-image: linear-gradient(90deg, transparent, #000 44px); }
+.filters.more-l.more-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent); }
+.fscroll { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .filters { cursor: grab; }
+  .filters.dragging { cursor: grabbing; scroll-behavior: auto; }
+  .filters.dragging .chip { pointer-events: none; }
+  .fscroll { position: absolute; z-index: 2; top: 50%; width: 32px; height: 32px; margin-top: -17px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--canvas); color: var(--ink); font-size: 20px; line-height: 1; box-shadow: var(--shadow-float);
+    visibility: hidden; opacity: 0; pointer-events: none; transform: scale(.9); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out), background-color 150ms ease, visibility 0s linear 150ms; }
+  .fscroll.prev { left: -2px; padding-right: 2px; }
+  .fscroll.next { right: -2px; padding-left: 2px; }
+  .filters-wrap.more-l .fscroll.prev, .filters-wrap.more-r .fscroll.next { visibility: visible; opacity: 1; pointer-events: auto; transform: none; transition-delay: 0s; }
+  .fscroll:hover { background: var(--parchment); }
+}
+/* 모바일 위쪽 칩 줄은 손가락으로 밀면 되니 화살표 없이 흐림만 */
+@media (max-width: 899px) { .fscroll { display: none !important; } }

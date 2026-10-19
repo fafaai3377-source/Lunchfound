@@ -696,9 +696,57 @@
   // PC 툴바: 칩 시작점을 지도 영역 왼쪽에 맞추려고 로고 너비를 CSS 변수로
   const syncBrandW = () => { const b = $("#brand"); if (b?.offsetWidth) document.documentElement.style.setProperty("--brandW", b.offsetWidth + "px"); };
   addEventListener("resize", syncBrandW);
+  // 필터 칩 줄 옆으로 넘기기 (PC): 마우스 휠(세로 휠도 옆으로) · 마우스로 잡고 끌기 · 양쪽 화살표, 넘칠 때만
+  let syncFilterScroll = () => {};
+  function initFilterScroll() {
+    const bar = $("#filterbar"), wrap = $("#filterwrap"); if (!bar || !wrap || bar._fs) return;
+    bar._fs = true;
+    syncFilterScroll = () => {
+      const max = bar.scrollWidth - bar.clientWidth, l = max > 2 && bar.scrollLeft > 2, r = max > 2 && bar.scrollLeft < max - 2;
+      for (const el of [bar, wrap]) { el.classList.toggle("more-l", l); el.classList.toggle("more-r", r); }
+    };
+    bar.addEventListener("scroll", syncFilterScroll, { passive: true });
+    addEventListener("resize", syncFilterScroll);
+    if (window.ResizeObserver) new ResizeObserver(syncFilterScroll).observe(bar);
+    // 휠: 칩이 넘칠 때만 가로로 (트랙패드 가로 밀기는 그대로)
+    bar.addEventListener("wheel", (e) => {
+      if (bar.scrollWidth - bar.clientWidth < 2 || e.ctrlKey) return;
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (!d) return;
+      e.preventDefault();
+      bar.scrollLeft += e.deltaMode === 1 ? d * 32 : d;
+    }, { passive: false });
+    // 마우스로 잡고 끌기 — 5px 넘게 끌면 칩 클릭(필터 선택)으로 치지 않음
+    let drag = null;
+    bar.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "mouse" || e.button !== 0 || bar.scrollWidth - bar.clientWidth < 2) return;
+      drag = { x: e.clientX, left: bar.scrollLeft, moved: false, id: e.pointerId };
+    });
+    addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved) { if (Math.abs(dx) < 5) return; drag.moved = true; bar.classList.add("dragging"); }
+      bar.scrollLeft = drag.left - dx;
+    });
+    const end = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const moved = drag.moved; drag = null; bar.classList.remove("dragging");
+      if (moved) {
+        const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+        bar.addEventListener("click", swallow, { capture: true, once: true });
+        setTimeout(() => bar.removeEventListener("click", swallow, true), 60);
+      }
+    };
+    addEventListener("pointerup", end); addEventListener("pointercancel", end);
+    // 양쪽 화살표: 보이는 폭의 70%씩 부드럽게
+    $$(".fscroll", wrap).forEach((b) => (b.onclick = () => bar.scrollBy({ left: (b.classList.contains("next") ? 1 : -1) * Math.max(160, bar.clientWidth * 0.7), behavior: "smooth" })));
+    syncFilterScroll();
+  }
   function renderFilterBar() {
     const bar = $("#filterbar"); if (!bar) return;
+    initFilterScroll();
     requestAnimationFrame(syncBrandW);
+    requestAnimationFrame(() => syncFilterScroll());
     const all = state.places.map((p) => ({ p, st: stats(p) }));
     const cnt = (c) => all.filter((x) => inCat(x, c)).length;
     const keys = [...Object.keys(SPECIAL), ...CATS.filter((c) => cnt(c))];

@@ -106,7 +106,12 @@
         <button class="me" id="meBtn" aria-label="내 정보"></button>
       </div>
       <!-- 공통 필터: 고른 종류만 지도 핀과 목록에 보여줌 (여러 개 선택) -->
-      <div class="filters" id="filterbar" role="group" aria-label="음식 종류 필터"></div>
+      <!-- PC: 칩이 넘치면 양쪽 화살표 · 마우스 휠 · 끌어서 옆으로 -->
+      <div class="filters-wrap" id="filterwrap">
+        <button class="fscroll prev" type="button" aria-label="필터 앞쪽 보기" tabindex="-1">‹</button>
+        <div class="filters" id="filterbar" role="group" aria-label="음식 종류 필터"></div>
+        <button class="fscroll next" type="button" aria-label="필터 뒤쪽 보기" tabindex="-1">›</button>
+      </div>
     </div>
 
     <div class="alert" id="alert" hidden role="status" aria-live="polite"></div>
