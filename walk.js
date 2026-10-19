@@ -47,7 +47,8 @@ window.Walk = (function () {
 
   // { meters, minutes, path: [[lat,lng], ...] } 또는 null(도로망 밖)
   function route(a, o) {
-    if (!ready) return null;
+    a = +a; o = +o;   // 좌표가 글자("37.55")로 저장돼 있어도 계산되게
+    if (!ready || !isFinite(a) || !isFinite(o)) return null;
     const key = `${a.toFixed(6)},${o.toFixed(6)}`;
     if (cache.has(key)) return cache.get(key);
     const t = nearest(a, o);

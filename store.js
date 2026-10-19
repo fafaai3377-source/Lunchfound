@@ -24,8 +24,15 @@
     let userCb = () => {}, current = null;
     A.onAuthStateChanged(auth, async (u) => {
       if (!u) { current = null; return userCb(null); }
-      const t = await u.getIdTokenResult().catch(() => null);
-      const name = t?.claims?.member;
+      // 오랜만에 열면 로그인 토큰을 새로 받아야 함 — 휴대폰이 막 깨어나 연결이 불안정하면 실패할 수 있어서 3번까지 다시 시도
+      let t = null;
+      for (let i = 0; i < 3 && !t; i++) {
+        t = await u.getIdTokenResult().catch((e) => { console.warn("[Lunchfound] 로그인 토큰 갱신 실패", e?.code || e); return null; });
+        if (!t) await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+      }
+      // 연결 문제로 토큰을 못 받은 경우엔 로그아웃시키지 않음 (다음에 열면 그대로 로그인 상태)
+      if (!t) return userCb(null, "인터넷 연결이 불안정해요. 잠시 뒤 새로고침해 주세요.");
+      const name = t.claims?.member;
       if (!name) { await A.signOut(auth); return userCb(null, "다시 로그인해 주세요."); }
       current = { uid: u.uid, name, admin: t?.claims?.admin === true };
       userCb(current);
@@ -45,15 +52,29 @@
       idToken: () => auth.currentUser?.getIdToken() ?? Promise.resolve(null),
       async getProfile() { return current ? { memberName: current.name, admin: current.admin } : null; },
       async setProfile() {},
-      subscribe(cb) {
+      // onErr(code): 가게·기록 목록을 받다가 오류가 나면 알려줌 (권한 오류는 토큰을 새로 받아 한 번 자동 재시도)
+      subscribe(cb, onErr) {
         const st = { places: [], reviews: [], meetups: [] };
-        // 가게 목록을 처음 받기 전에는 화면에 내보내지 않음 (잠깐 "가게 0곳"으로 보이는 순간이 생기지 않게)
-        let gotPlaces = false;
-        const emit = () => { if (gotPlaces) cb({ places: [...st.places], reviews: [...st.reviews], meetups: [...st.meetups] }); };
-        F.onSnapshot(F.query(F.collection(db, "meetups"), F.where("date", "in", [today(), tomorrow()])), (s) => { st.meetups = toArr(s); emit(); }, (e) => console.error(e));
-        F.onSnapshot(F.collection(db, "places"), (s) => { st.places = toArr(s); gotPlaces = true; emit(); }, (e) => console.error(e));
-        // 반 별점: 보안 규칙(rating은 정수)을 그대로 두고 rating2(별점×2, 1~10)에 함께 저장 → 읽을 때 rating2/2로 복원
-        F.onSnapshot(F.collection(db, "reviews"), (s) => { st.reviews = toArr(s).map((r) => (r.rating2 > 0 ? { ...r, rating: r.rating2 / 2 } : r)); emit(); }, (e) => console.error(e));
+        // 가게 목록과 기록을 둘 다 처음 받기 전에는 화면에 내보내지 않음 (잠깐 "가게 0곳"·"기록 없음"으로 보이는 순간이 생기지 않게)
+        let gotPlaces = false, gotReviews = false, retried = false, unsubs = [];
+        const emit = () => { if (gotPlaces && gotReviews) cb({ places: [...st.places], reviews: [...st.reviews], meetups: [...st.meetups] }); };
+        const fail = (what) => async (e) => {
+          console.error(`[Lunchfound] ${what} 목록 오류`, e?.code, e);
+          if (what !== "meetups" && /permission|unauth/.test(e?.code || "") && !retried) { retried = true; await auth.currentUser?.getIdToken(true).catch(() => {}); return listen(); }
+          if (what !== "meetups") onErr?.(e?.code || "error", what);
+        };
+        const listen = () => {
+          unsubs.forEach((u) => { try { u(); } catch {} });
+          unsubs = [
+            F.onSnapshot(F.query(F.collection(db, "meetups"), F.where("date", "in", [today(), tomorrow()])), (s) => { st.meetups = toArr(s); emit(); }, fail("meetups")),
+            F.onSnapshot(F.collection(db, "places"), (s) => { st.places = toArr(s); gotPlaces = true; emit(); }, fail("places")),
+            // 반 별점: 보안 규칙(rating은 정수)을 그대로 두고 rating2(별점×2, 1~10)에 함께 저장 → 읽을 때 rating2/2로 복원
+            F.onSnapshot(F.collection(db, "reviews"), (s) => { st.reviews = toArr(s).map((r) => (r.rating2 > 0 ? { ...r, rating: r.rating2 / 2 } : r)); gotReviews = true; emit(); }, fail("reviews")),
+          ];
+        };
+        listen();
+        // "다시 시도" 버튼: 로그인 토큰을 새로 받고 목록을 처음부터 다시 받음
+        this.retry = async () => { retried = false; await auth.currentUser?.getIdToken(true).catch(() => {}); listen(); };
       },
       async addPlace(d) { const r = await F.addDoc(F.collection(db, "places"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       updatePlace: (id, patch) => F.updateDoc(F.doc(db, "places", id), patch),

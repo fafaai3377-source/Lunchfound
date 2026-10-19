@@ -425,7 +425,7 @@
     let order = 0;
     state.markers.forEach((m) => m.remove());
     state.markers.clear();
-    for (const p of state.places) {
+    for (const p of state.places) try {
       const st = stats(p), fresh = st.count === 0;
       const el = document.createElement("div");
       el.className = ["pin", fresh && "wish", anyFilter() && !passes(st, p) && state.selected !== p.id && "hide", state.selected === p.id && "on"].filter(Boolean).join(" ");
@@ -438,7 +438,7 @@
       const m = MapKit.add(el, p.lat, p.lng, "bottom");
       if (state.selected === p.id) m.front?.(true);
       state.markers.set(p.id, m);
-    }
+    } catch (e) { console.warn(`[Lunchfound] 핀을 그리지 못한 가게: ${p?.name}`, e); }   // 가게 하나가 이상해도 나머지 핀은 그대로
   }
 
   // ───────── 마우스 올리면 뜨는 정보 카드 (메뉴 · 도보 시간 · 카테고리) ─────────
@@ -580,7 +580,9 @@
           return `<div class="group-h">${catLabel(c)}<span class="n">${list.length}곳</span></div>` + list.map((x) => rowHTML(x)).join(""); }).join("");
       }
       const sub = state.sort === "price" ? "멤버가 낸 가격이 낮은 순" : state.sort === "rating" ? "멤버 별점이 높은 순" : "카테고리별 · 사옥에서 가까운 순";
-      html = `<div class="section-h">${anyFilter() ? `${esc(filterLabel())} ` : "전체 "}${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${body2}`;
+      // 관리자에게만: 위치 정보가 비어 있어서 지도·목록에서 뺀 가게 알림 (Firebase 콘솔에서 lat·lng 숫자를 넣으면 다시 보여요)
+      const badNote = isAdmin() && state.badPlaces?.length ? `<p class="addr-warn">📍 위치 정보가 없는 가게 ${state.badPlaces.length}곳은 지도와 목록에서 뺐어요: ${state.badPlaces.map((p) => esc(p.name || p.id)).join(", ")}</p>` : "";
+      html = `${badNote}<div class="section-h">${anyFilter() ? `${esc(filterLabel())} ` : "전체 "}${base.length}곳</div><div class="section-sub">${sub}</div>${sortBar}${body2}`;
     } else if (state.tab === "member") {
       html = state.who ? whoHTML(state.who) : membersHTML();
     } else {
@@ -715,11 +717,13 @@
       }
     }));
   }
+  // 화면 그리기는 부분별로 따로: 한 부분(예: 지도 핀)에서 오류가 나도 목록·필터는 계속 보이게
+  function safe(what, fn) { try { fn(); } catch (e) { console.error(`[Lunchfound] ${what} 그리기 오류`, e); } }
   function renderAll() {
-    renderFilterBar();
-    renderMarkers();
-    renderPanel();
-    if (state.sheet === "place" && state.selected) renderPlace(state.selected);
+    safe("필터", renderFilterBar);
+    safe("지도 핀", renderMarkers);
+    safe("목록", renderPanel);
+    if (state.sheet === "place" && state.selected) safe("가게 상세", () => renderPlace(state.selected));
   }
 
   // ───────── 시트 공통 ─────────
@@ -1870,7 +1874,8 @@
     // 지도는 따로 준비 — 목록·핀 데이터는 지도 라이브러리·타일을 기다리지 않고 바로 받아서 보여줌
     // (예전엔 지도가 다 뜰 때까지 목록도 기다려서, 지도 서버가 느리면 사이트 전체가 느려 보였음)
     initMap();
-    if (window.Walk) await Walk.init(C.office).catch(() => {});
+    // 도보 길 데이터도 기다리지 않음 — 받는 대로 도보 시간만 다시 계산해서 그림
+    if (window.Walk) Walk.init(C.office).then(() => { if (state.places.length) renderAll(); }).catch(() => {});
     if (state.store.demo) demoSimulate();
     registerSW();
     initPush();
@@ -1879,15 +1884,47 @@
     // 기본 가게 자동 등록은 하지 않음 (예전 버전이 목록을 다 받기 전에 "비어 있다"고 보고 다시 등록하던 문제)
     // 미리보기 모드(이 브라우저에만 저장)만 기본 가게를 채워서 보여줌 — 실제 서비스에는 자동 등록 없음
     if (state.store.demo && window.SEED_PLACES) seedPlaces(SEED_PLACES.filter(() => true));
-    let firstView = true;
+    let firstView = true, gotData = false;
+    // 가게 목록을 받는 동안: 목록 자리에 "불러오는 중", 9초가 지나도 못 받으면 이유와 다시 시도 버튼
+    dataNotice("loading");
+    const slow = setTimeout(() => { if (!gotData) dataNotice("slow"); }, 9000);
     state.store.subscribe(({ places, reviews, meetups }) => {
-      state.places = places.map((p) => (CAT_ALIAS[p.category] ? { ...p, category: CAT_ALIAS[p.category] } : p)); state.reviews = reviews;
-      onMeetups(meetups || []);
+      gotData = true; clearTimeout(slow);
+      // 좌표가 글자로 저장된 가게도 숫자로 맞추고, 좌표가 아예 없는 가게는 지도·목록에서 빼서 나머지가 막히지 않게
+      const fixed = places.map((p) => ({ ...p, lat: +p.lat, lng: +p.lng, ...(CAT_ALIAS[p.category] ? { category: CAT_ALIAS[p.category] } : {}) }));
+      const bad = fixed.filter((p) => !Number.isFinite(p.lat) || !Number.isFinite(p.lng) || !p.lat || !p.lng);
+      if (bad.length) console.warn("[Lunchfound] 위치 정보가 없는 가게", bad.map((p) => p.name));
+      state.places = fixed.filter((p) => !bad.includes(p)); state.badPlaces = bad; state.reviews = reviews;
+      safe("오늘 약속", () => onMeetups(meetups || []));
       if (state.pending && places.some((p) => p.id === state.pending.id)) state.pending = null;
       renderAll();
       // 첫 데이터 때 한 번만: 지도가 이미 떠 있으면 목록 패널이 자리 잡은 뒤(0.3초) 사옥을 가운데로. 지도가 나중에 뜨면 initMap이 직접 맞춤
       if (firstView) { firstView = false; if (state.mapReady) setTimeout(() => homeView(true), 450); }
+    }, (code) => {
+      // 목록을 받다가 오류: 로그인 만료(권한)면 토큰을 새로 받아 한 번 더, 그 밖엔 연결 문제로 안내
+      console.error("[Lunchfound] 가게 목록 오류:", code);
+      if (gotData) return;
+      clearTimeout(slow);
+      dataNotice(/permission|unauth/.test(code) ? "auth" : "slow");
     });
+  }
+  // 목록 자리 안내: loading(불러오는 중) / slow(연결 문제 · 다시 시도) / auth(로그인 다시)
+  function dataNotice(kind) {
+    const body = $("#panelBody"); if (!body || state.places.length) return;
+    if (kind === "loading") { body.innerHTML = `<div class="data-msg"><span class="spin" aria-hidden="true"></span>가게 목록을 불러오는 중이에요</div>`; return; }
+    const auth = kind === "auth";
+    body.innerHTML = `<div class="data-msg err"><b>${auth ? "로그인이 만료됐어요" : "가게 목록을 아직 못 받았어요"}</b>
+      <p>${auth ? "보안을 위해 다시 로그인해 주세요. 기록은 그대로 있어요." : "인터넷 연결이 느리거나 잠깐 끊겼어요. 다시 시도해 주세요."}</p>
+      <div class="btns">${auth ? `<button class="btn btn-primary" data-dm="relogin">다시 로그인</button>` : `<button class="btn btn-primary" data-dm="retry">다시 시도</button>`}<button class="btn btn-plain" data-dm="reload">새로고침</button></div></div>`;
+    setPanel("open");   // 모바일: 안내가 보이게 목록을 올림
+    $$("[data-dm]", body).forEach((b) => (b.onclick = async () => {
+      const a = b.dataset.dm;
+      if (a === "reload") return location.reload();
+      if (a === "relogin") { await state.store.signOut?.(); return location.reload(); }
+      b.disabled = true; b.textContent = "다시 받는 중…"; dataNotice("loading");
+      await state.store.retry?.();
+      setTimeout(() => { if (!state.places.length) dataNotice("slow"); }, 9000);
+    }));
   }
 
   // 미리보기: 7초 뒤 다른 멤버가 약속을 올린 상황을 흉내 내서 알림 흐름을 보여줌

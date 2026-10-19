@@ -844,3 +844,13 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 :root[data-theme="dark"] .who-badge button { background: rgba(0,0,0,.12); }
 @keyframes chipDrop { from { opacity: 0; transform: translate(-50%, -8px); } }
 @media (min-width: 900px) { .who-badge { top: calc(var(--top) + 10px); left: calc(50% + var(--side) / 2); } }
+
+/* 목록을 받는 중 · 못 받았을 때 안내 (목록 자리) */
+.data-msg { display: flex; align-items: center; gap: 10px; padding: 28px 4px; color: var(--ink-2); font-size: 15px; }
+.data-msg.err { display: block; margin: 16px 0; padding: 18px 16px 14px; border-radius: var(--r-lg); background: var(--parchment); color: var(--ink); }
+.data-msg.err b { display: block; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+.data-msg.err p { margin: 0 0 14px; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+.data-msg .btn { min-height: 40px; padding: 8px 14px; font-size: 15px; }
+.spin { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid var(--fill-2); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
