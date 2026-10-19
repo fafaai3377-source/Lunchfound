@@ -279,6 +279,47 @@
   }
 
   // ───────── 지도 ─────────
+  // ───────── 지도 종류: 그래픽 · 일반 · 위성 (오른쪽 아래 지도 버튼 맨 위) ─────────
+  const MAP_MODES = { graphic: "그래픽", normal: "일반", satellite: "위성" };
+  const savedMapMode = () => { try { return localStorage.getItem("lunchfound-mapmode") || "graphic"; } catch { return "graphic"; } };
+  function applyMapMode(m, save) {
+    if (!MapKit.setMode) return;
+    if (!MAP_MODES[m] || (m === "satellite" && !MapKit.satelliteReady?.())) m = "graphic";
+    if (!MapKit.setMode(m)) m = "graphic";
+    state.mapMode = m;
+    document.documentElement.dataset.mapmode = m;
+    if (save) try { localStorage.setItem("lunchfound-mapmode", m); } catch {}
+    renderMapMode();
+  }
+  function renderMapMode() {
+    const box = $("#mapmode"); if (!box) return;
+    const sat = !!MapKit.satelliteReady?.(), cur = state.mapMode || "graphic";
+    box.innerHTML = `<div class="mm-title">지도 종류</div><div class="mm-opts">${Object.entries(MAP_MODES).map(([k, label]) => {
+      const off = k === "satellite" && !sat;
+      return `<button class="mm-opt" data-mm="${k}" aria-pressed="${cur === k}"${off ? ' aria-disabled="true"' : ""}><span class="mm-thumb ${k}"></span><span class="mm-l">${label}</span>${off ? `<small>준비 중</small>` : ""}</button>`;
+    }).join("")}</div>`;
+    $$("[data-mm]", box).forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation();
+      const k = b.dataset.mm;
+      if (k === "satellite" && !sat) return toast("위성 지도는 브이월드 인증키를 넣으면 켜져요");
+      applyMapMode(k, true); toggleMapMode(false);
+    }));
+  }
+  function toggleMapMode(open) {
+    const box = $("#mapmode"), btn = $("#zmode"); if (!box || !btn) return;
+    open = open ?? box.hidden;
+    if (open) { renderMapMode(); hideTip(true); }
+    box.hidden = !open; btn.setAttribute("aria-expanded", open);
+    btn.classList.toggle("on", open);
+  }
+  function bindMapMode() {
+    const btn = $("#zmode"); if (!btn) return;
+    btn.hidden = !MapKit.setMode;   // 카카오맵으로 돌릴 때는 버튼 없음
+    btn.onclick = (e) => { e.stopPropagation(); toggleMapMode(); };
+    // 카드 바깥을 누르거나 Esc → 닫기
+    document.addEventListener("pointerdown", (e) => { if (!$("#mapmode").hidden && !e.target.closest("#mapmode, #zmode")) toggleMapMode(false); }, true);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#mapmode").hidden) toggleMapMode(false); });
+  }
   // 지도가 못 떴을 때: 이유별 안내 + 다시 시도. 목록·기록·오늘 뭐 먹지는 지도와 상관없이 계속 쓸 수 있음
   function mapNotice(kind) {
     $("#map .map-msg")?.remove();
@@ -314,6 +355,7 @@
     $("#map .map-msg")?.remove();
     document.documentElement.classList.remove("lite", "map-off");
     state.mapReady = true;
+    applyMapMode(savedMapMode());   // 지난번에 고른 지도 종류(그래픽·일반·위성)로
     homeView(true);   // 처음 열 때도 사옥이 보이는 영역 가운데
     if (MapKit.attribution) { const a = $("#attrib"); a.textContent = MapKit.attribution; a.hidden = false; }
     const el = document.createElement("div");
@@ -1901,6 +1943,7 @@
     $("#meBtn").onclick = openMe;
     $("#addCancel").onclick = stopAdding;
     $("#scrim").onclick = closeSheet;
+    bindMapMode();
     $("#zin").onclick = () => MapKit.zoom(1);
     $("#zout").onclick = () => MapKit.zoom(-1);
     $("#zhome").onclick = () => homeView();

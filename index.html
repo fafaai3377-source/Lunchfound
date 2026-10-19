@@ -118,6 +118,11 @@
     <div class="addbar" id="addbar" hidden><span>지도를 눌러 가게 위치를 찍으세요</span><button class="link" id="addCancel">취소</button></div>
 
     <div class="mapctl">
+      <!-- 지도 종류: 그래픽 · 일반 · 위성 (누르면 왼쪽으로 고르는 카드) -->
+      <button class="icon-btn" id="zmode" aria-label="지도 종류" aria-expanded="false" aria-controls="mapmode" hidden>
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3.5 3 8.2l9 4.7 9-4.7-9-4.7Z"/><path d="m3 12.4 9 4.7 9-4.7"/><path d="m3 16.4 9 4.7 9-4.7"/></svg>
+      </button>
+      <div class="mapmode" id="mapmode" hidden role="dialog" aria-label="지도 종류"></div>
       <button class="icon-btn" id="zhome" aria-label="사옥으로">◉</button>
       <button class="icon-btn" id="zin" aria-label="확대">+</button>
       <button class="icon-btn" id="zout" aria-label="축소">−</button>

@@ -35,20 +35,38 @@
     } catch { return false; }
   }
 
-  // 카카오맵과 비슷한 차분한 색 (밝은 바탕 · 베이지 회색 건물 · 흰 도로), 식당 아이콘은 숨김(우리 핀과 겹치지 않게)
+  // ───────── 지도 종류: 그래픽(기본) · 일반 · 위성 ─────────
+  // 그래픽 = 카카오맵과 비슷한 차분한 색(밝은 바탕 · 베이지 회색 건물 · 흰 도로) + 식당 아이콘 숨김(우리 핀과 겹치지 않게)
+  // 일반 = 같은 지도 데이터를 원래 색 그대로 (상점 아이콘·이름까지) — 추가로 받는 데이터 없음
+  // 위성 = 항공사진 위에 길·장소 이름 글자만 (config.js의 vworldKey가 있을 때만)
+  const orig = new Map();   // 그래픽 색을 입히기 전 원래 값 (일반 지도로 돌릴 때 씀)
+  const keep = (key, get) => { if (!orig.has(key)) { try { orig.set(key, get()); } catch { orig.set(key, undefined); } } };
   function tint() {
-    const P = (id, k, v) => { try { map.setPaintProperty(id, k, v); } catch {} };
+    const P = (id, k, v) => { keep(`${id}|p|${k}`, () => map.getPaintProperty(id, k)); try { map.setPaintProperty(id, k, v); } catch {} };
+    const V = (id, v) => { keep(`${id}|v`, () => map.getLayoutProperty(id, "visibility") || "visible"); try { map.setLayoutProperty(id, "visibility", v); } catch {} };
     for (const l of map.getStyle().layers) {
       const id = l.id;
       try {
-        if (/^poi_r/.test(id) || id === "building-3d") { map.setLayoutProperty(id, "visibility", "none"); continue; }
-        if (id === "building") { map.setLayerZoomRange(id, 13, 24); P(id, "fill-color", "#EAE7E1"); P(id, "fill-outline-color", "#DAD6CE"); }
+        if (/^poi_r/.test(id) || id === "building-3d") { V(id, "none"); continue; }
+        if (id === "building") { const L = map.getLayer(id); keep(`${id}|z`, () => [L.minzoom ?? 0, L.maxzoom ?? 24]); map.setLayerZoomRange(id, 13, 24); P(id, "fill-color", "#EAE7E1"); P(id, "fill-outline-color", "#DAD6CE"); }
         if (l.type === "background" || id === "landuse_residential") P(id, l.type === "background" ? "background-color" : "fill-color", "#F5F4F1");
         if (/park|grass|wood|pitch/.test(id) && l.type === "fill") P(id, "fill-color", "#D9ECCF");
         if (id === "water") P(id, "fill-color", "#BFDDF5");
         if (l.type === "line" && /^(road|bridge)_.*casing/.test(id)) P(id, "line-color", "#DEDBD5");
+        // 글자는 어느 지도든 한국어 이름 먼저
         if (l.type === "symbol" && l.layout && l.layout["text-field"] && JSON.stringify(l.layout["text-field"]).includes("name"))
           map.setLayoutProperty(id, "text-field", ["coalesce", ["get", "name:ko"], ["get", "name"]]);
+      } catch {}
+    }
+  }
+  function untint() {
+    for (const [key, v] of orig) {
+      const [id, kind, prop] = key.split("|");
+      if (!map.getLayer(id) || id === "building-3d") continue;   // 입체 건물은 위에서 내려다보는 지도에선 회색 덩어리로만 보여서 항상 숨김
+      try {
+        if (kind === "p") map.setPaintProperty(id, prop, v === undefined ? null : v);
+        else if (kind === "v") map.setLayoutProperty(id, "visibility", v || "visible");
+        // 건물 표시 범위(z)는 되돌리지 않음: 원래 스타일은 가까이 보면 입체 건물로 바뀌는데, 입체 건물은 숨겨 두므로 납작한 건물을 계속 보여줌
       } catch {}
     }
   }
@@ -89,18 +107,24 @@
     map.on("zoom", far); far();
   }
   // ───────── 위성 지도 (실제 항공사진) ─────────
-  // 사진: Esri World Imagery(키 없음, 출처 표기 필요). 위에 길 이름·장소 이름 글자와 큰길만 반투명하게 겹쳐서 보여줌
-  const SAT = { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-    tileSize: 256, maxzoom: 19, attribution: "위성 사진 © Esri, Maxar, Earthstar Geographics" };
+  // 사진: 브이월드(국토교통부 공간정보 오픈플랫폼) 항공사진 — config.js의 vworldKey(무료 인증키, 사이트 주소 등록 필요)가 있어야 켜짐
+  // 위에 길 이름·장소 이름 글자와 큰길만 반투명하게 겹쳐서 보여줌
+  function satSource() {
+    const C = window.CONFIG || {};
+    if (C.vworldKey) return { type: "raster", tiles: [`https://api.vworld.kr/req/wmts/1.0.0/${C.vworldKey}/Satellite/{z}/{y}/{x}.jpeg`], tileSize: 256, maxzoom: 19, attribution: "항공사진 © 국토교통부 브이월드" };
+    if (C.satelliteTiles) return { type: "raster", tiles: [C.satelliteTiles], tileSize: 256, maxzoom: 19, attribution: C.satelliteAttribution || "" };
+    return null;
+  }
   const SAT_ROADS = /^(road|bridge)_(minor|street|secondary_tertiary|trunk_primary|link|motorway)$/;
   let satOn = false, satSaved = null;
   function setSatellite(on) {
     if (!map) return false;
     on = !!on;
     if (on === satOn) return true;
+    if (on && !satSource()) return false;
     satOn = on;
     if (on) {
-      if (!map.getSource("sat")) map.addSource("sat", SAT);
+      if (!map.getSource("sat")) map.addSource("sat", satSource());
       if (!map.getLayer("sat")) {
         const firstAbove = map.getStyle().layers.find((l) => l.type !== "background")?.id;   // 바탕색 바로 위 = 모든 지도 그림 아래
         map.addLayer({ id: "sat", type: "raster", source: "sat", paint: { "raster-fade-duration": 200 } }, firstAbove);
@@ -124,6 +148,18 @@
     }
     return true;
   }
+  // 지도 종류 바꾸기: "graphic" | "normal" | "satellite" (위성 키가 없으면 false)
+  let mode = "graphic";
+  function setMode(next) {
+    if (!map) return false;
+    if (next === "satellite" && !satSource()) return false;
+    setSatellite(false);
+    if (next === "normal") untint(); else tint();
+    if (next === "satellite") setSatellite(true);
+    mode = next;
+    return true;
+  }
+  const satelliteReady = () => !!satSource();
 
   // 아래 함수들은 지도가 아직 준비 전이거나 못 떴을 때 아무 일도 하지 않음 (목록·기록은 지도와 상관없이 먼저 쓸 수 있음)
   function add(node, lat, lng, anchor = "bottom") {
@@ -262,5 +298,5 @@
     } catch { return ""; }
   }
 
-  window.MapKit = { init, add, focus, zoom, home, setAdding, search, geocode, reverse, showRoute, clearRoute, fitRoute, setSatellite, attribution: "" };
+  window.MapKit = { init, add, focus, zoom, home, setAdding, search, geocode, reverse, showRoute, clearRoute, fitRoute, setSatellite, setMode, satelliteReady, getMode: () => mode, attribution: "" };
 })();
