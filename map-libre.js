@@ -88,6 +88,43 @@
     const far = () => el.classList.toggle("far", map.getZoom() < 15.6);
     map.on("zoom", far); far();
   }
+  // ───────── 위성 지도 (실제 항공사진) ─────────
+  // 사진: Esri World Imagery(키 없음, 출처 표기 필요). 위에 길 이름·장소 이름 글자와 큰길만 반투명하게 겹쳐서 보여줌
+  const SAT = { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+    tileSize: 256, maxzoom: 19, attribution: "위성 사진 © Esri, Maxar, Earthstar Geographics" };
+  const SAT_ROADS = /^(road|bridge)_(minor|street|secondary_tertiary|trunk_primary|link|motorway)$/;
+  let satOn = false, satSaved = null;
+  function setSatellite(on) {
+    if (!map) return false;
+    on = !!on;
+    if (on === satOn) return true;
+    satOn = on;
+    if (on) {
+      if (!map.getSource("sat")) map.addSource("sat", SAT);
+      if (!map.getLayer("sat")) {
+        const firstAbove = map.getStyle().layers.find((l) => l.type !== "background")?.id;   // 바탕색 바로 위 = 모든 지도 그림 아래
+        map.addLayer({ id: "sat", type: "raster", source: "sat", paint: { "raster-fade-duration": 200 } }, firstAbove);
+      }
+      map.setLayoutProperty("sat", "visibility", "visible");
+      // 지도 그림(면·선)은 숨기고 글자만 남김. 큰길은 흰 선을 반투명하게 → 사진 위에서도 길이 보이게
+      satSaved = [];
+      for (const l of map.getStyle().layers) {
+        if (l.id === "sat" || l.id.startsWith("route") || l.type === "symbol" || l.type === "background") continue;
+        const vis = map.getLayoutProperty(l.id, "visibility") || "visible";
+        if (l.type === "line" && SAT_ROADS.test(l.id)) { satSaved.push({ id: l.id, op: map.getPaintProperty(l.id, "line-opacity") }); map.setPaintProperty(l.id, "line-opacity", 0.35); continue; }
+        if (vis !== "none") { satSaved.push({ id: l.id, vis }); map.setLayoutProperty(l.id, "visibility", "none"); }
+      }
+    } else {
+      if (map.getLayer("sat")) map.setLayoutProperty("sat", "visibility", "none");
+      for (const s of satSaved || []) {
+        if ("op" in s) map.setPaintProperty(s.id, "line-opacity", s.op ?? null);
+        else map.setLayoutProperty(s.id, "visibility", s.vis);
+      }
+      satSaved = null;
+    }
+    return true;
+  }
+
   // 아래 함수들은 지도가 아직 준비 전이거나 못 떴을 때 아무 일도 하지 않음 (목록·기록은 지도와 상관없이 먼저 쓸 수 있음)
   function add(node, lat, lng, anchor = "bottom") {
     if (!map) return { remove() {}, front() {} };
@@ -225,5 +262,5 @@
     } catch { return ""; }
   }
 
-  window.MapKit = { init, add, focus, zoom, home, setAdding, search, geocode, reverse, showRoute, clearRoute, fitRoute, attribution: "" };
+  window.MapKit = { init, add, focus, zoom, home, setAdding, search, geocode, reverse, showRoute, clearRoute, fitRoute, setSatellite, attribution: "" };
 })();
