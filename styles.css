@@ -917,3 +917,10 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
   radial-gradient(circle at 28% 76%, #5E6B4B 0 16%, transparent 17%),
   linear-gradient(135deg, #4C5644, #6B695F); }
 @media (prefers-reduced-motion: reduce) { .mapmode { animation: none; } }
+
+/* 멤버 상세: "지도에도 … 보여요" 줄 오른쪽 작은 정렬 (자주 간 순 · 최신순) */
+.who-note-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 2px 2px; }
+.who-note-row .who-note { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-sort { display: inline-flex; flex: none; gap: 2px; padding: 2px; border-radius: 9999px; background: var(--fill); }
+.mini-sort button { padding: 3px 9px; border-radius: 9999px; font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.mini-sort button[aria-pressed="true"] { background: var(--canvas); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
