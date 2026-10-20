@@ -585,17 +585,6 @@ input { font: inherit; color: inherit; }
 
 /* ───────── 룰렛: 카테고리 + 가게 체크 ───────── */
 .rl-cats { flex-wrap: wrap; }
-.rl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.rl-list { max-height: 240px; overflow-y: auto; border-radius: var(--r-md); background: var(--parchment); padding: 4px 10px; }
-.rl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: .5px solid var(--hair); cursor: pointer; }
-.rl-item:last-child { border-bottom: 0; }
-.rl-item input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; margin: 0; }
-.rl-item .thumb.sm { width: 36px; height: 36px; border-radius: 9px; flex: none; position: relative; overflow: hidden; }
-.rl-item .thumb.sm .ph { font-size: 18px; }
-.rl-item .thumb.sm img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.rl-nm { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; display: flex; flex-direction: column; }
-.rl-nm small { font-size: 12px; font-weight: 400; color: var(--ink-3); }
-.rl-item:has(input:not(:checked)) .rl-nm, .rl-item:has(input:not(:checked)) .thumb { opacity: .45; }
 
 /* ───────── PC: 식당 상세는 오른쪽에서 밀려 들어오는 고정 메뉴 (왼쪽 목록과 대칭) ───────── */
 @media (min-width: 900px) {
@@ -916,3 +905,14 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .mini-sort { display: inline-flex; flex: none; gap: 2px; padding: 2px; border-radius: 9999px; background: var(--fill); }
 .mini-sort button { padding: 3px 9px; border-radius: 9999px; font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
 .mini-sort button[aria-pressed="true"] { background: var(--canvas); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+/* ═════════ 저장 버튼: 채우기 전엔 회색 상자 → 저장할 만큼 채우면 파란색으로 불이 들어옴 (10/20) ═════════ */
+/* 회색이어도 누를 수 있어요 — 재방문은 "간 기록만 남기기", 처음 기록은 별점 안내 */
+.btn-idle { background: var(--fill); color: var(--ink-2); }
+.save-btn { transition: transform .12s, background-color 220ms var(--ease-out), color 220ms var(--ease-out); }
+.save-btn.lit { animation: saveLit 520ms var(--ease-out); }
+@keyframes saveLit { from { box-shadow: 0 0 0 0 rgba(0, 122, 255, .38); } to { box-shadow: 0 0 0 12px rgba(0, 122, 255, 0); } }
+/* 처음 기록: 별점·메모 아래 "아는 것만" 구분 줄 */
+.form-more { display: flex; align-items: center; gap: 8px; margin: 26px 0 -4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.form-more::after { content: ""; flex: 1; height: .5px; background: var(--hair); }
+.form-more span { font-weight: 400; color: var(--ink-3); }

@@ -81,7 +81,7 @@
     sort: "rating",   // 전체 목록 정렬: rating(별점 높은 순) / near(가까운 순) / price(낮은 가격 순)
     tab: "list", cats: [], sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
-    rl: { want: [], avoid: [], off: new Set(), skipYesterday: true, includeWish: true, spinning: false },
+    rl: { avoid: [], skipYesterday: true, includeWish: true, spinning: false },
   };
 
   // ───────── 계산 ─────────
@@ -1179,6 +1179,7 @@
     state.form = old
       ? { editId, revisit, status: old.status, rating: +old.rating || 0, wait: old.wait || "", solo: old.solo || "", menu: old.menu || "", price: old.price ? String(old.price) : "", picks: [...(old.picks || [])].filter((k) => PICKS[k]), memo: old.memo || "", photos: [], removed: [], busy: !!old.photoCount }
       : { revisit, status: revisit ? "visited" : status, rating: 0, wait: "", solo: "", menu: "", price: "", picks: [], memo: "", photos: [], busy: false };
+    state.form._ready = formReady(state.form);
     // 수정: 이 기록에 붙은 사진을 불러와서 빼거나 더할 수 있게 (처음 기록 · 재방문 기록 모두)
     const rerender = () => (state.form?.revisit ? renderRevisitForm(p) : render());
     if (old?.photoCount && state.store.listPhotos) state.store.listPhotos(placeId).then((all) => {
@@ -1192,30 +1193,32 @@
       const f = state.form, v = f.status === "visited";
       const chips = (k, m) => Object.entries(m).map(([key, label]) => `<button class="chip" data-${k}="${key}" aria-pressed="${f[k] === key}">${label}</button>`).join("");
       const s = showSheet(`
-        ${head(esc(p.name), f.editId ? "<span>내 기록 수정</span>" : "<span>30초면 끝나요</span>")}
+        ${head(esc(p.name), f.editId ? "<span>내 기록 수정</span>" : v ? "<span>별점만 남겨도 돼요</span>" : "<span>30초면 끝나요</span>")}
         <div class="field"><div class="seg"><button data-status="visited" aria-pressed="${v}">가봤어요</button><button data-status="wish" aria-pressed="${!v}">♡ 가고 싶어요</button></div></div>
         ${v ? `
-          <div class="field"><span class="flabel">별점</span><div class="stars half" role="group" aria-label="별점 (0.5점 단위)">${[1, 2, 3, 4, 5].map((n) => `<span class="st" data-fill="${f.rating >= n ? "full" : f.rating >= n - 0.5 ? "half" : ""}"><button data-star="${n - 0.5}" aria-label="${n - 0.5}점" aria-pressed="${f.rating === n - 0.5}"></button><button data-star="${n}" aria-label="${n}점" aria-pressed="${f.rating === n}"></button></span>`).join("")}<span class="star-v">${f.rating ? `${f.rating.toFixed(1)}점` : "0.5점 단위"}</span></div><p class="err" id="rerr"></p></div>
-          <div class="field"><span class="flabel">점심시간 웨이팅</span><div class="chips">${chips("wait", WAIT)}</div></div>
-          <div class="field"><span class="flabel">혼밥</span><div class="chips">${chips("solo", SOLO)}</div></div>
-          <div class="field"><label class="flabel" for="rmenu">추천 메뉴</label><input class="input" id="rmenu" maxlength="40" placeholder="제육 정식" value="${esc(f.menu)}" /></div>
-          <div class="field"><label class="flabel" for="rprice">내가 낸 가격 <span class="opt">만원 미만이면 💸 거지맵에 들어가요</span></label><input class="input" id="rprice" inputmode="numeric" maxlength="7" placeholder="9000" value="${esc(f.price)}" /></div>
-          <div class="field"><span class="flabel">추천 포인트 <span class="opt">최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
+          <div class="field"><span class="flabel">별점 <span class="opt">이것만 있으면 저장돼요</span></span><div class="stars half" role="group" aria-label="별점 (0.5점 단위)">${[1, 2, 3, 4, 5].map((n) => `<span class="st" data-fill="${f.rating >= n ? "full" : f.rating >= n - 0.5 ? "half" : ""}"><button data-star="${n - 0.5}" aria-label="${n - 0.5}점" aria-pressed="${f.rating === n - 0.5}"></button><button data-star="${n}" aria-label="${n}점" aria-pressed="${f.rating === n}"></button></span>`).join("")}<span class="star-v">${f.rating ? `${f.rating.toFixed(1)}점` : "0.5점 단위"}</span></div><p class="err" id="rerr"></p></div>
           <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택 · 팁, 추천, 주의할 점</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="2층 창가 자리가 넓어요 · 점심 세트에 음료 포함">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
+          <div class="form-more">아래는 아는 것만 골라주세요 <span>모두 선택</span></div>
+          <div class="field"><span class="flabel">점심시간 웨이팅 <span class="opt">선택</span></span><div class="chips">${chips("wait", WAIT)}</div></div>
+          <div class="field"><span class="flabel">혼밥 <span class="opt">선택</span></span><div class="chips">${chips("solo", SOLO)}</div></div>
+          <div class="field"><label class="flabel" for="rmenu">추천 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="제육 정식" value="${esc(f.menu)}" /></div>
+          <div class="field"><label class="flabel" for="rprice">내가 낸 가격 <span class="opt">선택 · 만원 미만이면 💸 거지맵에 들어가요</span></label><input class="input" id="rprice" inputmode="numeric" maxlength="7" placeholder="9000" value="${esc(f.price)}" /></div>
+          <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
           <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 첫 장이 목록 대표 사진이 돼요</span></span>
             <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
               ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
             <p class="err" id="phErr"></p></div>`
         : `<div class="field"><label class="flabel" for="rmenu">먹어보고 싶은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="더블 치즈버거" value="${esc(f.menu)}" /></div>
            <div class="field"><label class="flabel" for="rmemo">메모 <span class="opt">선택 · 왜 가고 싶은지, 누구랑 가고 싶은지</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="인스타에서 봤는데 웨이팅 있대요 · 금요일에 같이 가요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>`}
-        <div class="stack" style="margin-top:26px"><button class="btn btn-primary btn-block" id="rsave">${f.editId ? "수정 완료" : "기록 저장"}</button>${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
+        <div class="stack" style="margin-top:26px">${saveBtnHTML(f)}${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
       `, "review");
+      syncSave(s);
       $$("[data-status]", s).forEach((b) => (b.onclick = () => { f.status = b.dataset.status; render(); }));
       $$("[data-star]", s).forEach((b) => (b.onclick = () => { f.rating = +b.dataset.star; render(); }));
       $$("[data-wait]", s).forEach((b) => (b.onclick = () => { f.wait = f.wait === b.dataset.wait ? "" : b.dataset.wait; render(); }));
       $$("[data-solo]", s).forEach((b) => (b.onclick = () => { f.solo = f.solo === b.dataset.solo ? "" : b.dataset.solo; render(); }));
-      const m = $("#rmenu", s); if (m) m.oninput = () => (f.menu = m.value);
-      const mm = $("#rmemo", s); if (mm) mm.oninput = () => { f.memo = mm.value; $("#rmemoN", s).textContent = `${mm.value.length}/100`; };
+      const m = $("#rmenu", s); if (m) m.oninput = () => { f.menu = m.value; syncSave(s); };
+      const mm = $("#rmemo", s); if (mm) mm.oninput = () => { f.memo = mm.value; $("#rmemoN", s).textContent = `${mm.value.length}/100`; syncSave(s); };
       $$("[data-pick]", s).forEach((b) => (b.onclick = () => {
         const k = b.dataset.pick;
         if (f.picks.includes(k)) f.picks = f.picks.filter((x) => x !== k);
@@ -1254,7 +1257,7 @@
     const known = topMenus(st.visited, 6);   // 이 가게에서 멤버들이 적은 메뉴 — 누르면 바로 입력
     const s = showSheet(`
       ${head(esc(p.name), `<span class="again">🔁 ${n}번째 방문</span><span>${f.editId ? "재방문 기록 수정" : "별점 없이 간단하게"}</span>`)}
-      <p class="revisit-note">별점은 처음 남긴 기록 그대로 두고, 이번에 먹은 것만 남겨요. 방문이 쌓이면 🔁 또간집과 멤버별 '자주 간 곳'에 반영돼요.</p>
+      <p class="revisit-note">별점은 처음 남긴 기록 그대로예요. 아무것도 안 적고 <b>간 기록만 남기기</b>를 눌러도 방문이 쌓여서 🔁 또간집과 멤버별 '자주 간 곳'에 반영돼요.</p>
       <div class="field"><label class="flabel" for="rmenu">오늘 먹은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="${esc(known[0] || "제육 정식")}" value="${esc(f.menu)}" />
         ${known.length ? `<div class="chips sub quick-menus" aria-label="이 가게에서 멤버들이 먹은 메뉴">${known.map((m) => `<button class="chip" data-qm="${esc(m)}" aria-pressed="${!!f.menu && menuKey(f.menu) === menuKey(m)}">${esc(m)}</button>`).join("")}</div>` : ""}</div>
       <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
@@ -1263,11 +1266,12 @@
         <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
           ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
         <p class="err" id="phErr"></p></div>
-      <div class="stack" style="margin-top:26px"><button class="btn btn-primary btn-block" id="rsave">${f.editId ? "수정 완료" : "재방문 기록 저장"}</button>${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
+      <div class="stack" style="margin-top:26px">${saveBtnHTML(f)}${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
     `, "review");
-    const m = $("#rmenu", s); m.oninput = () => { f.menu = m.value; $$("[data-qm]", s).forEach((b) => b.setAttribute("aria-pressed", !!f.menu && menuKey(f.menu) === menuKey(b.dataset.qm))); };
+    syncSave(s);
+    const m = $("#rmenu", s); m.oninput = () => { f.menu = m.value; $$("[data-qm]", s).forEach((b) => b.setAttribute("aria-pressed", !!f.menu && menuKey(f.menu) === menuKey(b.dataset.qm))); syncSave(s); };
     $$("[data-qm]", s).forEach((b) => (b.onclick = () => { f.menu = menuKey(f.menu) === menuKey(b.dataset.qm) ? "" : b.dataset.qm; renderRevisitForm(p); }));
-    const mm = $("#rmemo", s); mm.oninput = () => { f.memo = mm.value; $("#rmemoN", s).textContent = `${mm.value.length}/100`; };
+    const mm = $("#rmemo", s); mm.oninput = () => { f.memo = mm.value; $("#rmemoN", s).textContent = `${mm.value.length}/100`; syncSave(s); };
     $$("[data-pick]", s).forEach((b) => (b.onclick = () => {
       const k = b.dataset.pick;
       if (f.picks.includes(k)) f.picks = f.picks.filter((x) => x !== k);
@@ -1295,9 +1299,34 @@
     $("#rsave", s).onclick = saveReview;
     $$("[data-close]", s).forEach((b) => (b.onclick = () => openPlace(p.id)));
   }
+  // 저장 버튼: 채우기 전엔 회색 상자 → 저장할 만큼 채우면 파란색으로 "불이 들어옴"
+  //  · 처음 기록(가봤어요): 별점이 있으면 (나머지는 전부 선택)
+  //  · 재방문: 메뉴·추천 포인트·메모·사진 중 하나라도 있으면. 회색일 때 눌러도 "간 기록만" 저장돼요
+  //  · 가고 싶어요: 고른 것 자체가 기록이라 항상 파란색
+  function formReady(f) {
+    if (!f) return false;
+    if (f.revisit) return !!(f.menu.trim() || f.picks.length || f.memo.trim() || f.photos.length);
+    return f.status === "visited" ? f.rating > 0 : true;
+  }
+  function saveLabel(f) {
+    if (f.editId) return "수정 완료";
+    if (f.revisit) return formReady(f) ? "재방문 기록 저장" : "간 기록만 남기기";
+    return f.status === "visited" ? "기록 저장" : "가고 싶은 곳에 담기";
+  }
+  // 그릴 때는 직전 상태 색으로 그리고(syncSave가 바로 새 상태로 바꿈) → 회색→파랑 바뀌는 순간이 부드럽게 보이게
+  const saveBtnHTML = (f) => `<button class="btn btn-block save-btn ${f._ready ? "btn-primary" : "btn-idle"}" id="rsave">${esc(saveLabel(f))}</button>`;
+  function syncSave(s) {
+    const f = state.form, b = s && $("#rsave", s); if (!f || !b || b.disabled) return;
+    const on = formReady(f), was = f._ready;
+    b.textContent = saveLabel(f);
+    if (on !== b.classList.contains("btn-primary")) { void b.offsetWidth; b.classList.toggle("btn-primary", on); b.classList.toggle("btn-idle", !on); }
+    b.classList.remove("lit");
+    if (on && !was) { void b.offsetWidth; b.classList.add("lit"); }
+    f._ready = on;
+  }
   async function saveReview() {
     const f = state.form, v = f.status === "visited";
-    if (v && !f.revisit && !f.rating) { $("#rerr").textContent = "별점을 골라주세요."; return; }
+    if (v && !f.revisit && !f.rating) { $("#rerr").textContent = "별점을 골라주세요."; $("#sheet .stars")?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
     if (f.busy) { $("#phErr").textContent = "사진을 준비하고 있어요. 잠시만요."; return; }
     const btn = $("#rsave"); btn.disabled = true;
     const photos = v ? f.photos : [];
@@ -1358,66 +1387,46 @@
     const start = d.getTime();
     return [...new Set(state.reviews.filter((r) => r.uid === state.user.uid && r.status === "visited" && r.createdAt >= start && r.createdAt < end).map((r) => placeById(r.placeId)?.category).filter(Boolean))];
   }
-  // 룰렛 후보: 땡기는 것(전체 목록과 같은 칩, 혼밥·거지맵 포함) 안에서 → 먹기 싫은 것 빼고 → 체크된 곳만
-  // "어제 먹은 종류 빼기"는 땡기는 것을 하나도 안 골랐을 때만 적용 (직접 고른 게 항상 우선)
+  // 룰렛 후보: 밥집 전체(카페 제외) → 먹기 싫은 것 빼고 → (스위치) 어제 먹은 종류 빼기
+  // 땡기는 것·돌릴 가게 체크는 10/20에 뺐어요 — 고를 건 "먹기 싫은 것" 하나만
   function rlBase() {
     const rl = state.rl;
     // 오늘 뭐 먹지는 점심 밥집만 — 카페는 후보에서 제외
     return state.places.filter((p) => p.category !== "카페").map((p) => ({ p, st: stats(p) })).filter((x) => (x.st.count || rl.includeWish) && !rl.avoid.includes(x.p.category || "기타"));
   }
   function rlPool() {
-    const rl = state.rl, yc = rl.skipYesterday && !rl.want.length ? yesterdayCats() : [];
-    const base = rlBase().filter((x) => !rl.want.length || rl.want.some((c) => inCat(x, c)));
+    const rl = state.rl, yc = rl.skipYesterday ? yesterdayCats() : [];
+    const base = rlBase();
     const out = base.filter((x) => !yc.includes(x.p.category || "기타"));
     // 어제 먹은 종류를 빼면 하나도 안 남을 때는 빼지 않음 (룰렛이 비어 버리지 않게)
     rl.relaxed = yc.length > 0 && !out.length && base.length > 0;
     return (rl.relaxed ? base : out).sort(byRating);
   }
-  const candidates = () => rlPool().filter((x) => !state.rl.off.has(x.p.id));
   function openRoulette() {
     const rl = state.rl;
-    // 전체 탭에서 카테고리를 골라둔 상태로 열면 그 카테고리로 시작
-    if (!rl.opened && state.cats.length) rl.want = [...state.cats];
-    rl.opened = true;
     const render = () => {
       const prevScroll = state.sheet === "roulette" ? $("#sheet").scrollTop : 0;
-      const pool = rlPool(), list = pool.filter((x) => !rl.off.has(x.p.id));
-      const base = rlBase(), cnt = (c) => base.filter((x) => inCat(x, c)).length;
+      const list = rlPool();
       const used = CATS.filter((c) => c !== "카페" && state.places.some((p) => (p.category || "기타") === c));
-      const wantChips = [`<button class="chip" data-want="" aria-pressed="${!rl.want.length}">전체<span class="n">${base.length}</span></button>`,
-        ...Object.keys(SPECIAL).map((c) => `<button class="chip special" data-want="${c}" aria-pressed="${rl.want.includes(c)}">${SPECIAL[c].label}<span class="n">${cnt(c)}</span></button>`),
-        ...used.filter((c) => !rl.avoid.includes(c)).map((c) => `<button class="chip" data-want="${c}" aria-pressed="${rl.want.includes(c)}">${catLabel(c)}<span class="n">${cnt(c)}</span></button>`)].join("");
       const avoidChips = used.map((c) => `<button class="chip" data-avoid="${c}" aria-pressed="${rl.avoid.includes(c)}">${catLabel(c)}</button>`).join("");
-      const ycAll = yesterdayCats(), ycOn = rl.skipYesterday && !rl.want.length && ycAll.length;
-      const allOn = pool.length && pool.every((x) => !rl.off.has(x.p.id));
+      const ycAll = yesterdayCats();
       const s = showSheet(`
-        ${head("오늘 뭐 먹지?", `<span>카테고리를 고르고, 돌릴 가게를 체크해 주세요</span>`)}
-        <div class="field"><span class="flabel">땡기는 것 <span class="opt">여러 개 선택 · 안 고르면 전체</span></span><div class="chips rl-cats">${wantChips}</div></div>
-        <div class="field"><span class="flabel">먹기 싫은 것 <span class="opt">고르면 후보에서 빠져요</span></span><div class="chips neg rl-cats">${avoidChips}</div></div>
-        <div class="field"><div class="rl-head"><span class="flabel" style="margin:0">돌릴 가게 <b>${list.length}</b> / ${pool.length}곳</span>${pool.length ? `<button class="link" data-rl-all>${allOn ? "모두 빼기" : "모두 넣기"}</button>` : ""}</div>
-          <div class="rl-list">${pool.length ? pool.map((x) => `<label class="rl-item"><input type="checkbox" data-rp="${esc(x.p.id)}" ${rl.off.has(x.p.id) ? "" : "checked"} />${thumbHTML(x.p, "thumb sm")}<span class="rl-nm">${esc(x.p.name)}<small>${x.st.count ? `★ ${x.st.avg.toFixed(1)} · ` : ""}${esc(x.p.category || "기타")} · 도보 ${x.st.walk}분</small></span></label>`).join("") : `<p class="empty" style="padding:6px 0">${"조건에 맞는 가게가 없어요. 먹기 싫은 것을 조금 풀어보세요."}</p>`}</div></div>
+        ${head("오늘 뭐 먹지?", `<span>먹기 싫은 것만 빼고 돌려요</span>`)}
+        <div class="field"><span class="flabel">먹기 싫은 것 <span class="opt">여러 개 선택 · 고르면 후보에서 빠져요</span></span><div class="chips neg rl-cats">${avoidChips}</div></div>
         <div class="field list-card" style="background:var(--parchment);padding:0 12px">
-          <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${rl.want.length ? "땡기는 것을 고르면 적용 안 해요" : ycAll.length ? (rl.relaxed ? `어제 ${ycAll.map(esc).join(", ")} · 빼면 남는 곳이 없어 이번엔 포함` : `어제 기록: ${ycAll.map(esc).join(", ")}`) : "어제 남긴 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
+          <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${ycAll.length ? (rl.relaxed ? `어제 ${ycAll.map(esc).join(", ")} · 빼면 남는 곳이 없어 이번엔 포함` : `어제 기록: ${ycAll.map(esc).join(", ")}`) : "어제 남긴 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
           <div class="toggle-row" style="border-top:.5px solid var(--hair)"><span>아직 기록 없는 곳도 넣기<br><span style="font-size:13px;color:var(--ink-2)">가고 싶은 곳, 새로 등록된 곳 포함</span></span><button class="switch" role="switch" aria-checked="${rl.includeWish}" data-tg="includeWish" aria-label="가고 싶은 곳도 넣기"></button></div>
         </div>
         <div class="wheel" aria-hidden="true"><div class="wheel-band"></div><div class="wheel-track" id="track">${(list.length ? list : [{ p: { name: "후보가 없어요" } }]).slice(0, 5).map((x) => `<div class="wheel-item">${esc(x.p.name)}</div>`).join("")}</div></div>
-        <p class="count">후보 ${list.length}곳${list.length === 1 ? " · 한 곳뿐이에요" : ""}</p>
+        <p class="count">${list.length ? `후보 ${list.length}곳${list.length === 1 ? " · 한 곳뿐이에요" : ""}` : "후보가 없어요 · 먹기 싫은 것을 조금 풀어보세요"}</p>
         <div id="rlResult"></div>
         <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="spin" ${list.length ? "" : "disabled"}>돌리기</button></div>
       `, "roulette");
-      $$("[data-want]", s).forEach((b) => (b.onclick = () => {
-        const c = b.dataset.want;
-        rl.want = !c ? [] : rl.want.includes(c) ? rl.want.filter((x) => x !== c) : [...rl.want, c];
-        render();
-      }));
       $$("[data-avoid]", s).forEach((b) => (b.onclick = () => {
         const c = b.dataset.avoid;
         rl.avoid = rl.avoid.includes(c) ? rl.avoid.filter((x) => x !== c) : [...rl.avoid, c];
-        rl.want = rl.want.filter((x) => x !== c);
         render();
       }));
-      $$("[data-rp]", s).forEach((b) => (b.onchange = () => { b.checked ? rl.off.delete(b.dataset.rp) : rl.off.add(b.dataset.rp); render(); }));
-      const ra = $("[data-rl-all]", s); if (ra) ra.onclick = () => { pool.forEach((x) => (allOn ? rl.off.add(x.p.id) : rl.off.delete(x.p.id))); render(); };
       $$("[data-tg]", s).forEach((b) => (b.onclick = () => { rl[b.dataset.tg] = !rl[b.dataset.tg]; render(); }));
       $("#spin", s).onclick = () => spin(list, render);
       s.scrollTop = prevScroll;
