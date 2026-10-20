@@ -1884,6 +1884,7 @@
       <div class="field"><span class="flabel">화면 모드</span>${themeSeg()}</div>
       <div class="field"><span class="flabel">알림</span>${pushCard()}</div>
       <div class="stack" style="margin-top:18px">
+        <button class="btn btn-plain btn-block" id="guideBtn">🧭 사용 방법 다시 보기</button>
         <button class="btn btn-plain btn-block" id="installBtn">📲 앱으로 설치 (홈 화면에 추가)</button>
         ${state.store.demo ? `<div class="h3" style="margin-top:14px">알림 미리보기</div><div class="btns"><button class="btn btn-plain" id="pvPopular">12시 인기 장소</button><button class="btn btn-plain" id="pvRecord">기록 요청</button></div>
         <button class="btn btn-plain btn-block" id="pvIntro">첫 화면 소개 다시 보기</button>` : ""}
@@ -1891,6 +1892,7 @@
       </div>`, "me");
     const lo = $("#logout", s); if (lo) lo.onclick = async () => { await disablePush(true).catch(() => {}); await state.store.signOut(); location.reload(); };
     $("#installBtn", s).onclick = openInstall;
+    $("#guideBtn", s).onclick = startGuide;
     bindThemeSeg(s);
     bindPushCard(s, openMe);
     const pp = $("#pvPopular", s); if (pp) pp.onclick = () => { closeSheet(); nudgePopular(); };
@@ -1898,6 +1900,52 @@
     const pi = $("#pvIntro", s); if (pi) pi.onclick = () => { closeSheet(); showIntro(() => { $("#app").hidden = false; }); };
     const sw = $("#switchMe", s); if (sw) sw.onclick = async () => { await state.store.signOut(); location.reload(); };
     const rs = $("#resetDemo", s); if (rs) rs.onclick = () => { if (confirm("예시 데이터로 되돌릴까요? 남긴 기록이 지워져요.")) { state.store.reset(); location.reload(); } };
+  }
+
+  // ───────── 사용 방법 안내 (처음 온 멤버에게, 실제 버튼을 하나씩 비춤) — guide.js ─────────
+  // 비출 가게 핀: 지금 화면에 온전히 보이는(헤더·목록·다른 핀에 안 가린) 핀 중 지도 가운데에 가장 가까운 것
+  function guidePin() {
+    const pins = [...document.querySelectorAll("#map .pin:not(.hide) .pin-b")];
+    const cx = innerWidth / 2, cy = innerHeight / 2;
+    const ok = pins.map((b) => ({ b, r: b.getBoundingClientRect() })).filter(({ b, r }) => {
+      if (!r.width || r.top < 0 || r.left < 8 || r.right > innerWidth - 8 || r.bottom > innerHeight) return false;
+      const hit = document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2).find((e) => !e.closest(".guide"));
+      return hit && hit.closest(".pin") === b.closest(".pin");
+    });
+    ok.sort((a, b) => (a.b.closest(".pin").classList.contains("wish") - b.b.closest(".pin").classList.contains("wish"))
+      || Math.hypot(a.r.left - cx, a.r.top - cy) - Math.hypot(b.r.left - cx, b.r.top - cy));
+    return ok[0]?.b || null;
+  }
+  const guideSteps = () => [
+    { hero: true, icon: `<img src="./icons/icon-192.png" alt="" />`, title: `${C.appTitle || "Lunchfound"}에 오신 걸 환영해요`,
+      html: "사옥 근처에서 멤버들이 <b>직접 다녀온 밥집</b>을 모아 둔 지도예요.<br>버튼을 하나씩 짚어 드릴게요 · 30초면 끝나요" },
+    { el: guidePin, pad: 8, tapX: 0.5, title: "가게 핀", html: "핀을 누르면 사진 · 별점 · <b>추천 메뉴</b>와 사옥에서 걸어가는 길이 나와요. 숫자는 멤버들의 평균 별점이에요." },
+    { el: () => (desk() ? $("#filterwrap") : $("#filterbar")), pad: 4, tapX: 0.14, title: "먹고 싶은 것만 보기", html: "🍙 혼밥 · 💸 거지맵 · 🔁 또간집 · 음식 종류를 고르면 <b>지도와 목록이 같이</b> 바뀌어요. 여러 개 골라도 돼요." },
+    { el: "#tabs", pad: 4, tapX: 0.5, title: "전체 · 멤버 · 내 기록", html: "<b>멤버</b>를 누르면 그 사람이 다녀온 곳만 지도에 남아요. <b>내 기록</b>에선 내가 남긴 곳과 찜한 곳을 모아 봐요." },
+    { el: "#fab", pad: 5, tapX: 0.5, title: "장소 추가", html: "목록에 없는 가게는 여기서 등록해요. 가게 이름 검색 · 주소 붙여넣기 · 지도에서 찍기 중 편한 걸로." },
+    { el: "#rouletteBtn", pad: 5, tapX: 0.5, title: "오늘 뭐 먹지?", html: "고민될 땐 룰렛! <b>먹기 싫은 것</b>만 빼고 돌리면 오늘 갈 곳을 골라줘요." },
+    { el: "#meetBtn", pad: 5, tapX: 0.5, title: "오늘 약속", html: "같이 먹을 사람을 모아요. 약속을 올리면 알림을 켠 멤버들에게 <b>바로 알림</b>이 가요." },
+    { el: "#zmode", pad: 5, tapX: 0.5, title: "지도 종류", html: "<b>그래픽</b> 지도와 <b>위성</b> 지도를 바꿔 볼 수 있어요." },
+    { el: "#meBtn", pad: 5, tapX: 0.5, title: "내 정보", html: "약속 알림 켜기 · 다크 모드 · 앱으로 설치, 그리고 <b>이 안내 다시 보기</b>도 여기 있어요." },
+    { hero: true, title: "기록은 이렇게 남겨요", next: "시작하기",
+      html: `<ol class="gd-list"><li><span><b>가게 열기</b> — 핀이나 아래 목록에서</span></li><li><span><b>기록 남기기</b> — 별점만 골라도 저장돼요</span></li><li><span><b>또 갔다면</b> — 🔁 재방문 기록, 간 것만 남겨도 OK</span></li></ol>` },
+  ];
+  function startGuide() {
+    if (!window.LFGuide || LFGuide.isOpen()) return;
+    if (state.sheet) closeSheet();
+    hideTip(true); toggleMapMode(false); setPanel("min");
+    setTimeout(() => LFGuide.start(guideSteps()), state.sheet ? 260 : 60);
+  }
+  // 홈이 다 보인 뒤(소개 모션·스플래시가 끝나고, 열린 창이 없고, 핀이 그려진 뒤)에 자동으로
+  function maybeGuide(tries = 0) {
+    if (!window.LFGuide || !LFGuide.shouldShow() || LFGuide.isOpen()) return;
+    const busy = !$("#intro").hidden || $("#splash") || !$("#login").hidden || state.sheet || state.adding;
+    // 지도가 아직 준비 중이면 조금 기다림 (지도가 실패했으면 핀 단계만 빼고 바로)
+    const mapPending = !state.mapReady && !document.querySelector("#map .map-msg");
+    const noPins = state.mapReady && state.places.length && !document.querySelector("#map .pin");
+    if ((busy || mapPending || noPins) && tries < 40) return setTimeout(() => maybeGuide(tries + 1), 500);
+    if (busy) return;
+    startGuide();
   }
 
   // ───────── 로그인 · 멤버 고르기 ─────────
@@ -2011,7 +2059,7 @@
       if (state.pending && places.some((p) => p.id === state.pending.id)) state.pending = null;
       renderAll();
       // 첫 데이터 때 한 번만: 지도가 이미 떠 있으면 목록 패널이 자리 잡은 뒤(0.3초) 사옥을 가운데로. 지도가 나중에 뜨면 initMap이 직접 맞춤
-      if (firstView) { firstView = false; if (state.mapReady) setTimeout(() => homeView(true), 450); }
+      if (firstView) { firstView = false; if (state.mapReady) setTimeout(() => homeView(true), 450); setTimeout(maybeGuide, 1600); }
     }, (code) => {
       // 목록을 받다가 오류: 로그인 만료(권한)면 토큰을 새로 받아 한 번 더, 그 밖엔 연결 문제로 안내
       console.error("[Lunchfound] 가게 목록 오류:", code);
