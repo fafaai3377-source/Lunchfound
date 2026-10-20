@@ -1210,7 +1210,8 @@
             <p class="err" id="phErr"></p></div>`
         : `<div class="field"><label class="flabel" for="rmenu">먹어보고 싶은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="더블 치즈버거" value="${esc(f.menu)}" /></div>
            <div class="field"><label class="flabel" for="rmemo">메모 <span class="opt">선택 · 왜 가고 싶은지, 누구랑 가고 싶은지</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="인스타에서 봤는데 웨이팅 있대요 · 금요일에 같이 가요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>`}
-        <div class="stack" style="margin-top:26px">${saveBtnHTML(f)}${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
+        ${f.editId ? `<div class="stack" style="margin-top:22px"><button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button></div>` : ""}
+        <div class="save-bar">${saveBtnHTML(f)}</div>
       `, "review");
       syncSave(s);
       $$("[data-status]", s).forEach((b) => (b.onclick = () => { f.status = b.dataset.status; render(); }));
@@ -1266,7 +1267,8 @@
         <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
           ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
         <p class="err" id="phErr"></p></div>
-      <div class="stack" style="margin-top:26px">${saveBtnHTML(f)}${f.editId ? `<button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button>` : ""}</div>
+      ${f.editId ? `<div class="stack" style="margin-top:22px"><button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button></div>` : ""}
+      <div class="save-bar">${saveBtnHTML(f)}</div>
     `, "review");
     syncSave(s);
     const m = $("#rmenu", s); m.oninput = () => { f.menu = m.value; $$("[data-qm]", s).forEach((b) => b.setAttribute("aria-pressed", !!f.menu && menuKey(f.menu) === menuKey(b.dataset.qm))); syncSave(s); };
