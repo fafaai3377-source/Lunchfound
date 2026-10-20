@@ -81,7 +81,7 @@
     sort: "rating",   // 전체 목록 정렬: rating(별점 높은 순) / near(가까운 순) / price(낮은 가격 순)
     tab: "list", cats: [], sheet: null, selected: null, adding: false, ghost: null, form: null,
     markers: new Map(), mapReady: false,
-    rl: { avoid: [], skipYesterday: true, includeWish: true, spinning: false },
+    rl: { avoid: [], spinning: false },
   };
 
   // ───────── 계산 ─────────
@@ -1381,28 +1381,11 @@
   }
 
   // ───────── 오늘 뭐 먹지? (룰렛) ─────────
-  // "어제" = 지난 평일 하루 (월요일이면 금요일). 오늘 몰아서 남긴 기록은 어제로 치지 않음
-  function yesterdayCats() {
-    const d = new Date(); d.setHours(0, 0, 0, 0);
-    const end = d.getTime();
-    do d.setDate(d.getDate() - 1); while (d.getDay() === 0 || d.getDay() === 6);
-    const start = d.getTime();
-    return [...new Set(state.reviews.filter((r) => r.uid === state.user.uid && r.status === "visited" && r.createdAt >= start && r.createdAt < end).map((r) => placeById(r.placeId)?.category).filter(Boolean))];
-  }
-  // 룰렛 후보: 밥집 전체(카페 제외) → 먹기 싫은 것 빼고 → (스위치) 어제 먹은 종류 빼기
-  // 땡기는 것·돌릴 가게 체크는 10/20에 뺐어요 — 고를 건 "먹기 싫은 것" 하나만
-  function rlBase() {
-    const rl = state.rl;
-    // 오늘 뭐 먹지는 점심 밥집만 — 카페는 후보에서 제외
-    return state.places.filter((p) => p.category !== "카페").map((p) => ({ p, st: stats(p) })).filter((x) => (x.st.count || rl.includeWish) && !rl.avoid.includes(x.p.category || "기타"));
-  }
+  // 룰렛 후보: 밥집 전체(카페 제외, 기록 없는 곳 포함)에서 먹기 싫은 것만 빼요
+  // 땡기는 것·돌릴 가게 체크·스위치(어제 먹은 종류 빼기 / 기록 없는 곳 넣기)는 10/20에 뺐어요 — 고를 건 "먹기 싫은 것" 하나만
   function rlPool() {
-    const rl = state.rl, yc = rl.skipYesterday ? yesterdayCats() : [];
-    const base = rlBase();
-    const out = base.filter((x) => !yc.includes(x.p.category || "기타"));
-    // 어제 먹은 종류를 빼면 하나도 안 남을 때는 빼지 않음 (룰렛이 비어 버리지 않게)
-    rl.relaxed = yc.length > 0 && !out.length && base.length > 0;
-    return (rl.relaxed ? base : out).sort(byRating);
+    const rl = state.rl;
+    return state.places.filter((p) => p.category !== "카페" && !rl.avoid.includes(p.category || "기타")).map((p) => ({ p, st: stats(p) })).sort(byRating);
   }
   function openRoulette() {
     const rl = state.rl;
@@ -1411,14 +1394,9 @@
       const list = rlPool();
       const used = CATS.filter((c) => c !== "카페" && state.places.some((p) => (p.category || "기타") === c));
       const avoidChips = used.map((c) => `<button class="chip" data-avoid="${c}" aria-pressed="${rl.avoid.includes(c)}">${catLabel(c)}</button>`).join("");
-      const ycAll = yesterdayCats();
       const s = showSheet(`
         ${head("오늘 뭐 먹지?", `<span>먹기 싫은 것만 빼고 돌려요</span>`)}
         <div class="field"><span class="flabel">먹기 싫은 것 <span class="opt">여러 개 선택 · 고르면 후보에서 빠져요</span></span><div class="chips neg rl-cats">${avoidChips}</div></div>
-        <div class="field list-card" style="background:var(--parchment);padding:0 12px">
-          <div class="toggle-row"><span>어제 먹은 종류 빼기<br><span style="font-size:13px;color:var(--ink-2)">${ycAll.length ? (rl.relaxed ? `어제 ${ycAll.map(esc).join(", ")} · 빼면 남는 곳이 없어 이번엔 포함` : `어제 기록: ${ycAll.map(esc).join(", ")}`) : "어제 남긴 내 기록이 없어요"}</span></span><button class="switch" role="switch" aria-checked="${rl.skipYesterday}" data-tg="skipYesterday" aria-label="어제 먹은 종류 빼기"></button></div>
-          <div class="toggle-row" style="border-top:.5px solid var(--hair)"><span>아직 기록 없는 곳도 넣기<br><span style="font-size:13px;color:var(--ink-2)">가고 싶은 곳, 새로 등록된 곳 포함</span></span><button class="switch" role="switch" aria-checked="${rl.includeWish}" data-tg="includeWish" aria-label="가고 싶은 곳도 넣기"></button></div>
-        </div>
         <div class="wheel" aria-hidden="true"><div class="wheel-band"></div><div class="wheel-track" id="track">${(list.length ? list : [{ p: { name: "후보가 없어요" } }]).slice(0, 5).map((x) => `<div class="wheel-item">${esc(x.p.name)}</div>`).join("")}</div></div>
         <p class="count">${list.length ? `후보 ${list.length}곳${list.length === 1 ? " · 한 곳뿐이에요" : ""}` : "후보가 없어요 · 먹기 싫은 것을 조금 풀어보세요"}</p>
         <div id="rlResult"></div>
@@ -1429,7 +1407,6 @@
         rl.avoid = rl.avoid.includes(c) ? rl.avoid.filter((x) => x !== c) : [...rl.avoid, c];
         render();
       }));
-      $$("[data-tg]", s).forEach((b) => (b.onclick = () => { rl[b.dataset.tg] = !rl[b.dataset.tg]; render(); }));
       $("#spin", s).onclick = () => spin(list, render);
       s.scrollTop = prevScroll;
     };
