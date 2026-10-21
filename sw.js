@@ -1,7 +1,7 @@
 // foundeat 서비스워커 — 앱으로 설치(PWA), 오프라인 대비, 알림 클릭 처리
 // 앱 파일을 고치면 아래 VERSION 숫자만 올려주세요. 다음 접속 때 새 버전으로 바뀌어요.
-const VERSION = "foundeat-v51";
-const SHELL = ["./", "./index.html", "./styles.css", "./config.js", "./members.js", "./seeds.js", "./store.js", "./walk.js", "./map-kakao.js", "./map-libre.js", "./stores.js", "./guide.js", "./app.js", "./walk-graph.json", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/foundeat-192.png", "./icons/favicon-32.png", "./brand/logo-black.png", "./brand/logo-white.png", "./brand/mark-black.png"];
+const VERSION = "foundeat-v52";
+const SHELL = ["./", "./index.html", "./styles.css", "./config.js", "./members.js", "./seeds.js", "./store.js", "./walk.js", "./map-kakao.js", "./map-libre.js", "./stores.js", "./guide.js", "./app.js", "./walk-graph.json", "./brand/logo-black.png", "./brand/logo-white.png", "./brand/mark-black.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -14,6 +14,9 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
+  // 홈 화면 아이콘·파비콘·앱 정보(manifest)·시작 화면 그림은 서비스워커가 건드리지 않고 휴대폰이 직접 받아가게
+  // (예전엔 아이콘을 못 받으면 index.html을 대신 돌려줘서, 아이폰 홈 화면에 추가할 때 아이콘 대신 글자 F가 나왔음)
+  if (/^\/(icons|splash)\/|^\/(apple-touch-icon|favicon|manifest)/.test(url.pathname)) return;
   // 지도 라이브러리(vendor/, 버전이 폴더 이름에 있어 바뀌지 않음)는 저장해둔 것 먼저 — 두 번째부터는 내려받지 않고 바로
   if (url.pathname.includes("/vendor/")) {
     e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
@@ -25,7 +28,8 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     fetch(e.request)
       .then((res) => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); } return res; })
-      .catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html")))
+      // 저장해둔 것도 없으면: 페이지 이동일 때만 첫 화면(index.html), 그림·파일 요청엔 index.html을 주지 않고 실패로
+      .catch(() => caches.match(e.request).then((r) => r || (e.request.mode === "navigate" ? caches.match("./index.html") : Response.error())))
   );
 });
 
