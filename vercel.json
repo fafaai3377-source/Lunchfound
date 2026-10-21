@@ -1,8 +1,0 @@
-{
-  "rewrites": [
-    {
-      "source": "/t",
-      "destination": "/api/hit?f=page-t"
-    }
-  ]
-}
