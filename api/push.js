@@ -70,7 +70,7 @@ module.exports = async (req, res) => {
     }
     if (op === "test") {
       const mine = await db().collection("pushSubs").where("uid", "==", me.uid).get();
-      const r = await sendTo(mine.docs, { title: "Lunchfound 알림이 켜졌어요", body: "새 약속이 올라오면 이렇게 알려드릴게요", tag: "test", url: "./" });
+      const r = await sendTo(mine.docs, { title: "foundeat 알림이 켜졌어요", body: "새 약속이 올라오면 이렇게 알려드릴게요", tag: "test", url: "./" });
       return res.status(200).json(r);
     }
 
