@@ -1921,19 +1921,36 @@
   addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; });
   const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  // 카카오톡·네이버·인스타그램 등 앱 안에서 열린 브라우저: 홈 화면에 추가해도 foundeat 아이콘이 안 붙거나 아예 추가가 안 됨
+  const isKakao = () => /KAKAOTALK/i.test(navigator.userAgent);
+  const inApp = () => isKakao() || /NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(navigator.userAgent);
+  // Safari(아이폰) · 크롬(안드로이드)으로 이 사이트 열기
+  function openOutside() {
+    const url = location.origin + "/";
+    if (isKakao()) { location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(url); return; }
+    if (!isIOS()) { location.href = `intent://${location.host}/#Intent;scheme=https;package=com.android.chrome;end`; return; }
+    const done = () => toast("주소를 복사했어요. Safari 주소창에 붙여넣어 주세요");
+    try { navigator.clipboard.writeText(url).then(done, () => toast(url)); } catch { toast(url); }
+  }
+  const oldIconNote = `<p class="hint" style="margin-top:10px">홈 화면에 예전에 추가한 아이콘(Lunchfound 포함)이 있으면 먼저 길게 눌러 지운 다음 다시 추가해 주세요. 휴대폰이 예전 아이콘을 기억하고 있을 수 있어요.</p>`;
   function openInstall() {
+    const browser = isIOS() ? "Safari로" : "크롬으로", kakaoAnd = isKakao() && !isIOS();
     const how = standalone() ? `<p class="empty">이미 앱으로 쓰고 있어요 👍</p>`
-      : installEvt ? `<div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="doInstall">앱 설치하기</button></div>`
-      : isIOS() ? `<ol class="steps"><li><b>Safari</b>로 이 주소를 열어요</li><li>아래쪽 <b>공유 버튼(□↑)</b>을 눌러요</li><li><b>홈 화면에 추가</b> → <b>추가</b></li><li>홈 화면의 foundeat 아이콘으로 열면 앱처럼 전체 화면으로 열려요. 아이폰은 이렇게 추가해야 알림도 받을 수 있어요(iOS 16.4 이상)</li></ol>`
-      : `<ol class="steps"><li><b>크롬</b>으로 이 주소를 열어요</li><li>오른쪽 위 <b>⋮ 메뉴</b> → <b>앱 설치</b> 또는 <b>홈 화면에 추가</b></li><li>PC 크롬은 주소창 오른쪽의 <b>설치 아이콘</b>을 눌러도 돼요</li></ol>`;
+      : inApp() ? `<p class="hint" style="margin-top:12px">지금은 ${isKakao() ? "카카오톡" : "다른 앱"} 안에서 열린 화면이라 홈 화면에 추가해도 foundeat 아이콘이 제대로 안 붙어요. <b>${kakaoAnd ? "크롬이나 삼성 인터넷으로" : browser}</b> 연 다음 추가해 주세요.</p>
+          <div class="stack" style="margin-top:12px"><button class="btn btn-primary btn-block" id="openOut">${kakaoAnd ? "브라우저로 열기" : `${browser} 열기`}</button></div>`
+      : installEvt ? `<div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="doInstall">앱 설치하기</button></div>${oldIconNote}`
+      : isIOS() ? `<ol class="steps"><li><b>Safari</b>로 이 주소를 열어요</li><li>아래쪽 <b>공유 버튼(□↑)</b>을 눌러요</li><li><b>홈 화면에 추가</b> → <b>추가</b></li><li>홈 화면의 foundeat 아이콘으로 열면 앱처럼 전체 화면으로 열려요. 아이폰은 이렇게 추가해야 알림도 받을 수 있어요(iOS 16.4 이상)</li></ol>${oldIconNote}`
+      : `<ol class="steps"><li><b>크롬</b>으로 이 주소를 열어요</li><li>오른쪽 위 <b>⋮ 메뉴</b> → <b>앱 설치</b> 또는 <b>홈 화면에 추가</b></li><li>PC 크롬은 주소창 오른쪽의 <b>설치 아이콘</b>을 눌러도 돼요</li></ol>${oldIconNote}`;
     const s = showSheet(`${head("앱으로 설치", "<span>홈 화면에 추가하면 앱처럼 전체 화면으로 열려요</span>")}${how}`, "install");
     const b = $("#doInstall", s);
     if (b) b.onclick = async () => { installEvt.prompt(); const r = await installEvt.userChoice.catch(() => null); installEvt = null; toast(r?.outcome === "accepted" ? "설치했어요!" : "다음에 설치할 수 있어요"); closeSheet(); };
+    const o = $("#openOut", s);
+    if (o) o.onclick = openOutside;
   }
   function installTip() {
     if (standalone() || !matchMedia("(max-width: 899px)").matches) return;
     try { if (localStorage.getItem("lunchmap-install-tip")) return; localStorage.setItem("lunchmap-install-tip", "1"); } catch { return; }
-    showBanner({ icon: "📲", title: "홈 화면에 추가해 보세요", sub: "앱처럼 바로 열리고, 약속 알림도 받을 수 있어요", actions: [{ label: "방법 보기", primary: true, run: openInstall }], ms: 12000 });
+    showBanner({ icon: "📲", title: "홈 화면에 추가해 보세요", sub: inApp() ? `${isIOS() ? "Safari로" : "크롬으로"} 열어서 추가하면 앱처럼 바로 열려요` : "앱처럼 바로 열리고, 약속 알림도 받을 수 있어요", actions: [{ label: "방법 보기", primary: true, run: openInstall }], ms: 12000 });
   }
   function registerSW() {
     // 미리보기(공유 링크) 페이지에는 서비스워커 파일이 없으니 등록하지 않음
