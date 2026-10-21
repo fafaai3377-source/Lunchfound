@@ -14,7 +14,7 @@ const TEST_PAGE = `<!doctype html>
     <link rel="icon" type="image/png" sizes="64x64" href="/api/hit?f=t-favicon" />
     <link rel="manifest" href="/api/manifest?from=t" />
     <meta name="theme-color" content="#DA2C23" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/api/hit?f=t-touch180" />
+    <link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,${B.touch180.b64}" />
     <meta name="apple-mobile-web-app-title" content="foundeat 테스트" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>foundeat 테스트</title>
