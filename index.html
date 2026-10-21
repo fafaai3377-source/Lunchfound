@@ -2,6 +2,18 @@
 <html lang="ko" data-theme="light">
 <head>
   <meta charset="utf-8" />
+  <!-- 앱 정보·아이콘 (foundfoundedmeet처럼 head 맨 위에)
+       · 앱 정보(매니페스트)는 /api/manifest가 기기에 맞춰 줌: 아이폰·맥 Safari = 빨강 꽉 찬 // , 데스크탑 크롬 = 빨간 동그라미, 안드로이드 = 빨강 꽉 찬 바탕
+       · 탭 아이콘은 빨간 동그라미, 아이폰 홈 화면 아이콘(apple-touch-icon)은 빨강 꽉 찬 // . 아이콘을 바꿀 땐 파일 이름 자체를 새로 -->
+  <link rel="manifest" href="/api/manifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+  <link rel="alternate icon" href="/icons/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/fe-home-180.png" />
+  <script>
+    // 아이폰·아이패드: 탭 아이콘도 홈 화면과 같은 빨강 꽉 찬 // 로 (아이폰은 홈 화면에 추가할 때 탭 아이콘을 쓰기도 해서)
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+      document.querySelectorAll('link[rel~="icon"]').forEach(function (l) { l.href = "/icons/fe-home-180.png"; l.type = "image/png"; l.setAttribute("sizes", "180x180"); });
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <!-- 상단 상태바 색: 스플래시 동안만 버건디, 그 뒤엔 화면 배경색과 같게 (app.js applyTheme) -->
   <meta name="theme-color" content="#DA2C23" />
@@ -20,13 +32,6 @@
   <link rel="preload" href="./vendor/maplibre-gl-4.7.1/maplibre-gl.js" as="script" />
   <link rel="preload" href="./vendor/maplibre-gl-4.7.1/maplibre-gl.css" as="style" />
   <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
-  <!-- 앱으로 설치 (PWA) -->
-  <link rel="manifest" href="/manifest.webmanifest?v=56" />
-  <!-- 탭·데스크탑 아이콘: 빨간 동그라미 로고 -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
-  <link rel="alternate icon" href="/icons/favicon.ico" />
-  <!-- 아이폰 홈 화면 아이콘만: 빨강 꽉 찬 바탕 + 흰 // (아이폰이 모서리를 둥글게 깎음). 바꿀 땐 파일 이름 자체를 새로 -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/fe-home-180.png" />
   <!-- 아이폰 홈 화면 앱 시작 화면 (버건디 + 흰 로고) -->
   <link rel="apple-touch-startup-image" media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1290x2796.png" />
   <link rel="apple-touch-startup-image" media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1179x2556.png" />
