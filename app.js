@@ -1,4 +1,4 @@
-// Lunchfound — 앱 로직. 지도는 MapKit(카카오 또는 미리보기 이미지), 데이터는 createStore()를 씀
+// foundeat — 앱 로직. 지도는 MapKit(카카오 또는 미리보기 이미지), 데이터는 createStore()를 씀
 (function () {
   const C = window.CONFIG, MEMBERS = window.MEMBERS;
 
@@ -18,6 +18,10 @@
   const member = (name) => MEMBERS.find((m) => m.name === name);
   // 관리자(이름 "admin" + 관리자 비밀번호): 누가 등록했든 장소·기록 삭제, 장소 정보 수정, 모든 약속 취소 가능
   const isAdmin = () => !!state.user?.admin;
+  // 게스트(이름 "게스트" + 게스트 비밀번호): 둘러보기만 — 멤버 탭·기록·찜·약속 없음, 누가 먹었는지 이름은 안 보임 (서버가 이름을 빼고 보내줌)
+  const isGuest = () => !!state.user?.guest;
+  const isGuestName = (n) => /^(게스트|guest)$/i.test(String(n || "").trim());
+  const ANON_AV = `<span class="avatar sm anon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6"/><path d="M5.5 19.5c.9-3.3 3.4-5 6.5-5s5.6 1.7 6.5 5"/></svg></span>`;
 
   const WAIT = { none: "웨이팅 없음", ten: "10분 안팎", twenty: "20분 이상" };
   const WAIT_S = { none: "없음", ten: "10분", twenty: "20분+" };
@@ -210,7 +214,7 @@
   const isAndroid = () => /Android/i.test(navigator.userAgent);
   const isMobileOS = () => isAndroid() || /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   function dirLinks(p) {
-    const o = C.office, on = o.mapName || o.name, E = encodeURIComponent, app = E(location.hostname || "lunchfound");
+    const o = C.office, on = o.mapName || o.name, E = encodeURIComponent, app = E(location.hostname || "foundeat");
     const naverWeb = `https://map.naver.com/p/directions/${nEnc(o.lng)},${nEnc(o.lat)},${E(on)},${o.naverPlaceId || ""},PLACE_POI/${nEnc(p.lng)},${nEnc(p.lat)},${E(p.name)},${p.naverPlaceId || ""},PLACE_POI/-/walk?c=18.00,0,0,0,dh`;
     const kakaoWeb = `https://map.kakao.com/link/by/walk/${E(on)},${o.lat},${o.lng}/${E(p.name)},${p.lat},${p.lng}`;
     const naverQ = `route/walk?slat=${o.lat}&slng=${o.lng}&sname=${E(on)}&dlat=${p.lat}&dlng=${p.lng}&dname=${E(p.name)}&appname=${app}`;
@@ -373,7 +377,7 @@
       await MapKit.init($("#map"), C.office, onMapTap, () => mapNotice("LOST"));
     } catch (e) {
       const why = e?.message || "";
-      console.warn("[Lunchfound] 지도 실패:", why);
+      console.warn("[foundeat] 지도 실패:", why);
       if (why !== "NO_KAKAO_KEY" && attempt === 0) { await new Promise((r) => setTimeout(r, 1200)); return initMap(1); }
       mapNotice(why);
       return;
@@ -506,7 +510,7 @@
       const m = MapKit.add(el, p.lat, p.lng, "bottom");
       if (state.selected === p.id) m.front?.(true);
       state.markers.set(p.id, m);
-    } catch (e) { console.warn(`[Lunchfound] 핀을 그리지 못한 가게: ${p?.name}`, e); }   // 가게 하나가 이상해도 나머지 핀은 그대로
+    } catch (e) { console.warn(`[foundeat] 핀을 그리지 못한 가게: ${p?.name}`, e); }   // 가게 하나가 이상해도 나머지 핀은 그대로
   }
 
   // ───────── 마우스 올리면 뜨는 정보 카드 (메뉴 · 도보 시간 · 카테고리) ─────────
@@ -592,7 +596,7 @@
   const HEART = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.4 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 5.6 3.5 4.3 6.8-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg>`;
   // 방금 누른 하트: 저장되면서 목록·상세가 다시 그려져도 톡 튀는 모션이 끊기지 않게 잠깐 기억
   let favBumped = { id: "", t: 0 };
-  const heartHTML = (pid, cls = "") => `<span class="fav ${cls}${favBumped.id === pid && Date.now() - favBumped.t < 450 ? " bump" : ""}" role="button" tabindex="0" data-fav="${esc(pid)}" aria-pressed="${isFav(pid)}" aria-label="${isFav(pid) ? "찜 빼기" : "찜하기"}">${HEART}</span>`;
+  const heartHTML = (pid, cls = "") => isGuest() ? "" : `<span class="fav ${cls}${favBumped.id === pid && Date.now() - favBumped.t < 450 ? " bump" : ""}" role="button" tabindex="0" data-fav="${esc(pid)}" aria-pressed="${isFav(pid)}" aria-label="${isFav(pid) ? "찜 빼기" : "찜하기"}">${HEART}</span>`;
   let favBusy = false;
   async function toggleFav(pid) {
     if (favBusy) return; favBusy = true;
@@ -850,7 +854,7 @@
     }));
   }
   // 화면 그리기는 부분별로 따로: 한 부분(예: 지도 핀)에서 오류가 나도 목록·필터는 계속 보이게
-  function safe(what, fn) { try { fn(); } catch (e) { console.error(`[Lunchfound] ${what} 그리기 오류`, e); } }
+  function safe(what, fn) { try { fn(); } catch (e) { console.error(`[foundeat] ${what} 그리기 오류`, e); } }
   function renderAll() {
     safe("필터", renderFilterBar);
     safe("지도 핀", renderMarkers);
@@ -906,10 +910,10 @@
     const st = stats(p), l = links(p), me = state.user.uid, img = curImage(p);
     const mineAny = st.rs.some((r) => r.uid === me), others = st.rs.some((r) => r.uid !== me);
     const myFirst = st.first.some((r) => r.uid === me);   // 이미 처음 기록을 남긴 곳이면 → 재방문 기록
-    const whoBtn = (r) => member(r.userName) ? `<button class="who who-link" data-who-go="${esc(r.userName)}">${esc(r.userName)}님</button>` : `<span class="who">${esc(r.userName)}님</span>`;
+    const whoBtn = (r) => isGuest() ? `<span class="who">파파 멤버</span>` : member(r.userName) ? `<button class="who who-link" data-who-go="${esc(r.userName)}">${esc(r.userName)}님</button>` : `<span class="who">${esc(r.userName)}님</span>`;
     const cards = memberCards(st);
     const reviews = cards.map((c) => { const b = c.base, mine = c.uid === me, ids = c.vs.map((r) => r.id).join(",");
-      return `<div class="review${c.visits > 1 ? " revisit" : ""}">${avatar(c.userName, true)}<div class="review-body">
+      return `<div class="review${c.visits > 1 ? " revisit" : ""}">${isGuest() ? ANON_AV : avatar(c.userName, true)}<div class="review-body">
         <div class="review-top"><span class="who-line">${whoBtn(b)}<span class="visit-n${c.visits > 1 ? " again" : ""}">${c.visits > 1 ? IC_AGAIN : ""}${c.visits}회 방문</span></span><span class="when">${ago(c.last)}</span></div>
         ${c.rated ? `<div class="stars-s">${starsTxt(b.rating)}</div>` : ""}
         ${!isRevisit(b) && (b.wait || b.solo || b.price) ? `<div class="tags">${b.wait ? `<span class="tag">${WAIT[b.wait]}</span>` : ""}${b.solo ? `<span class="tag">${SOLO[b.solo]}</span>` : ""}${b.price ? `<span class="tag">${won(b.price)}</span>` : ""}</div>` : ""}
@@ -920,14 +924,14 @@
         ${c.visits > 1 ? `<details class="visits"><summary>방문 내역 ${c.visits}</summary><ol class="visit-list">${c.vs.map((r, i) => `<li><span class="vd">${md(r.createdAt)}</span><span class="vt">${i === 0 && !isRevisit(r) ? `처음${r.rating ? ` · ★ ${(+r.rating).toFixed(1)}` : ""}` : `${i + 1}번째`}</span><span class="vm">${esc([r.menu, r.memo && `“${r.memo}”`].filter(Boolean).join(" · ") || (r.photoCount ? `사진 ${r.photoCount}장` : "간 기록만"))}</span>${mine ? `<button class="link" data-edit="${esc(r.id)}">수정</button>` : isAdmin() ? `<button class="link danger" data-del="${esc(r.id)}">삭제</button>` : ""}</li>`).join("")}</ol></details>` : ""}
         ${mine ? `<div class="mine-acts"><button class="del" data-edit="${esc(b.id)}">${isRevisit(b) ? "수정" : "내 기록 수정"}</button>${c.visits > 1 ? "" : `<span aria-hidden="true">·</span><button class="del" data-del="${esc(b.id)}">삭제</button>`}</div>`
           : isAdmin() ? `<button class="del" data-del-group="${esc(ids)}">기록 삭제 (관리자)</button>` : ""}</div></div>`; }).join("");
-    const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.memo ? ` · <span class="wish-memo">“${esc(r.memo)}”</span>` : ""}${r.uid === me ? ` <button class="link" data-edit="${esc(r.id)}">수정</button> <button class="link" data-del="${esc(r.id)}">취소</button>` : isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
+    const wishers = !st.wish.length ? "" : isGuest() ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.length}명</p>` : `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.memo ? ` · <span class="wish-memo">“${esc(r.memo)}”</span>` : ""}${r.uid === me ? ` <button class="link" data-edit="${esc(r.id)}">수정</button> <button class="link" data-del="${esc(r.id)}">취소</button>` : isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>`;
     const canDelCover = img && isAdmin();   // 대표 사진 올리기·빼기는 관리자만 (멤버는 기록 사진이 자동으로 대표 사진이 됨)
     const hero = `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}
         <div class="hero-cap">${img ? `<span class="hero-who">📷 ${img.by ? `${esc(img.by)}님 사진` : `${esc(img.from || "대표")} 사진`}</span>` : (() => { const r = state.reviews.filter((x) => x.placeId === p.id && x.thumb).sort((a, b) => b.createdAt - a.createdAt)[0];
           return `<span class="hero-who">${r ? `📷 ${esc(r.userName || "멤버")}님 사진${r.menu ? ` · ${esc(r.menu)}` : ""}` : isAdmin() ? "아직 대표 사진이 없어요" : "기록에 사진을 남기면 여기 보여요"}</span>`; })()}
           <span class="hero-btns">${p.images?.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}${canDelCover ? `<button data-act="delcover">빼기</button>` : ""}${isAdmin() ? `<label class="hero-up"><input type="file" accept="image/*" hidden id="coverIn" />📷 ${img ? "사진 추가" : "대표 사진 올리기"}</label>` : ""}</span></div></div>`;
     const s = showSheet(`
-      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.address && /\d/.test(p.address) ? `<span class="addr-line">📍 ${esc(p.address)}</span>` : ""}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${st.visits >= 2 ? `<span class="again">${IC_AGAIN}멤버들이 ${st.visits}번 다녀왔어요${st.visits >= AGAIN && p.category !== "카페" ? " · 또간집" : ""}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
+      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}${isGuest() ? "" : `<button class="link cat-edit" data-act="editcat">종류 수정</button>`}</span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.address && /\d/.test(p.address) ? `<span class="addr-line">📍 ${esc(p.address)}</span>` : ""}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${st.visits >= 2 ? `<span class="again">${IC_AGAIN}멤버들이 ${st.visits}번 다녀왔어요${st.visits >= AGAIN && p.category !== "카페" ? " · 또간집" : ""}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
       ${hero}
       <div class="stats">
         <div class="stat"><div class="k">별점</div><div class="v">${st.count ? `★ ${st.avg.toFixed(1)}` : "–"}</div></div>
@@ -936,15 +940,15 @@
         <div class="stat"><div class="k">평균</div><div class="v">${st.price ? `${(st.price / 1000).toFixed(st.price % 1000 ? 1 : 0)}천원` : "–"}</div></div>
       </div>
       <div class="stack">
-        <button class="btn btn-primary btn-block" data-act="review">${myFirst ? "또 왔어요 · 내 기록 업데이트" : "기록 남기기"}</button>
+        ${isGuest() ? `<p class="guest-note">게스트는 둘러보기만 할 수 있어요 · 기록은 파파 멤버만 남겨요</p>` : `<button class="btn btn-primary btn-block" data-act="review">${myFirst ? "또 왔어요 · 내 기록 업데이트" : "기록 남기기"}</button>
         ${mineAny ? "" : `<button class="btn btn-secondary btn-block" data-act="wish">♡ 찜하고 메모 남기기</button>`}
-        <button class="btn btn-plain btn-block" data-act="meet">🍽 여기로 오늘 약속 만들기</button>
+        <button class="btn btn-plain btn-block" data-act="meet">🍽 여기로 오늘 약속 만들기</button>`}
         <div class="btns"><a class="btn btn-plain" href="${l.naver}" data-dir="naver" target="_blank" rel="noopener">네이버 길찾기</a><a class="btn btn-plain" href="${l.kakao}" data-dir="kakao" target="_blank" rel="noopener">카카오 길찾기</a></div>
         <p class="dir-note">출발 ${esc(C.office.mapName || C.office.name)} · 도보 경로로 열려요</p>
       </div>
       ${st.picks.length ? `<div class="h3">멤버 추천 포인트</div><div class="picks">${st.picks.map(([k, n]) => `<span class="pick-agg">${PICKS[k]}<b>${n}</b></span>`).join("")}</div>` : ""}
       ${wishers}
-      <div class="h3 menu-h">메뉴판<label class="link menu-add"><input type="file" accept="image/*" multiple hidden id="menuIn" />＋ 메뉴판 사진 올리기</label></div>
+      <div class="h3 menu-h">메뉴판${isGuest() ? "" : `<label class="link menu-add"><input type="file" accept="image/*" multiple hidden id="menuIn" />＋ 메뉴판 사진 올리기</label>`}</div>
       <div class="menu-board" id="menuBoard"><p class="empty" style="padding:4px 0">아직 메뉴판 사진이 없어요. 가게에서 찍어두면 다음 사람이 메뉴 고르기 쉬워요.</p></div>
       <div class="gallery" id="gallery" hidden></div>
       <div class="h3">멤버 기록 ${cards.length}${st.visits > cards.length ? `<span class="h3-n">방문 ${st.visits}회</span>` : ""}</div>
@@ -953,12 +957,12 @@
         : p.createdBy === me && !others ? `<button class="del" data-act="delplace" style="margin-top:18px">이 장소 삭제</button>` : ""}
     `, "place");
     $$("[data-dir]", s).forEach((b) => (b.onclick = (e) => { e.preventDefault(); openDir(b.dataset.dir, p); }));
-    $("[data-act=review]", s).onclick = () => openReviewForm(p.id, myFirst ? "revisit" : "visited");
+    const rv = $("[data-act=review]", s); if (rv) rv.onclick = () => openReviewForm(p.id, myFirst ? "revisit" : "visited");
     // 기록 쓴 멤버 이름 → 그 멤버가 다녀온 곳 (모바일은 상세를 닫고 목록을 올려서 보여줌)
     $$("[data-who-go]", s).forEach((b) => (b.onclick = () => { const n = b.dataset.whoGo; if (!desk()) { closeSheet(); setPanel("open"); } showWho(n); }));
     const w = $("[data-act=wish]", s); if (w) w.onclick = () => openReviewForm(p.id, "wish");
     bindFav(s);
-    $("[data-act=meet]", s).onclick = () => openMeetForm(p.id);
+    const mt = $("[data-act=meet]", s); if (mt) mt.onclick = () => openMeetForm(p.id);
     const ci = $("#coverIn", s);
     if (ci) ci.onchange = async () => {
       const file = ci.files[0]; if (!file) return;
@@ -1039,6 +1043,7 @@
 
   // ───────── 장소 추가: 검색 ─────────
   function openAdd() {
+    if (isGuest()) return toast("게스트는 둘러보기만 할 수 있어요");
     const s = showSheet(`
       ${head("장소 추가", "<span>가게 이름으로 찾아보세요</span>")}
       <div class="field"><input class="input" id="q" placeholder="예: 어서와칼국수" autocomplete="off" enterkeyhint="search" /></div>
@@ -1209,6 +1214,7 @@
 
   // ───────── 기록 남기기 ─────────
   function openReviewForm(placeId, status, editId) {
+    if (isGuest()) return toast("게스트는 둘러보기만 할 수 있어요");
     const p = placeById(placeId); if (!p) return;
     state.selected = placeId;
     const old = editId ? state.reviews.find((r) => r.id === editId && r.uid === state.user.uid) : null;
@@ -1483,10 +1489,10 @@
       $("#rlResult").innerHTML = `<div class="result-card">${thumbHTML(p)}<div style="flex:1;min-width:0"><div class="rc-kicker">오늘은 여기!</div><div class="rc-name">${emojiFor(p)} ${esc(p.name)}</div>
         <div class="row-meta">${st.count ? `<span class="rate"><i>★</i> ${st.avg.toFixed(1)}</span>` : "<span>첫 기록을 남겨주세요</span>"}<span>도보 ${st.walk}분</span>${st.price ? `<span>${won(st.price)}</span>` : ""}</div></div></div>
         <div class="btns" style="margin-top:10px"><button class="btn btn-plain" id="again">다시 돌리기</button><button class="btn btn-primary" id="go">여기 갈래요</button></div>
-        <button class="btn btn-secondary btn-block" id="rlMeet" style="margin-top:8px">🍽 같이 갈 사람 모으기</button>`;
+        ${isGuest() ? "" : `<button class="btn btn-secondary btn-block" id="rlMeet" style="margin-top:8px">🍽 같이 갈 사람 모으기</button>`}`;
       $("#spin").hidden = true;
       $("#go").onclick = () => openPlace(p.id);
-      $("#rlMeet").onclick = () => openMeetForm(p.id);
+      const rm = $("#rlMeet"); if (rm) rm.onclick = () => openMeetForm(p.id);
       $("#again").onclick = () => { $("#spin").hidden = false; spin(list, rerender); };
     };
     track.addEventListener("transitionend", done, { once: true });
@@ -1578,6 +1584,7 @@
   }
 
   function openMeetList() {
+    if (isGuest()) return toast("게스트는 둘러보기만 할 수 있어요");
     const list = [...state.meetups].sort((x, y) => String(x.date).localeCompare(String(y.date)) || x.createdAt - y.createdAt);
     const canNotify = "Notification" in window;
     const s = showSheet(`
@@ -1599,7 +1606,7 @@
     $$("[data-mt-place]", root).forEach((b) => (b.onclick = () => openPlace(b.dataset.mtPlace)));
     $$("[data-mt-share]", root).forEach((b) => (b.onclick = async () => {
       const m = state.meetups.find((x) => x.id === b.dataset.mtShare); if (!m) return;
-      const text = `${dayWord(m)} ${LUNCH.start} ${meetPlace(m).name} 먹으실 분! (선착순 ${mtCount(m)}/${m.capacity}명)${m.note ? ` ${m.note}` : ""}\n👉 Lunchfound에서 참여: ${location.href.split("#")[0]}`;
+      const text = `${dayWord(m)} ${LUNCH.start} ${meetPlace(m).name} 먹으실 분! (선착순 ${mtCount(m)}/${m.capacity}명)${m.note ? ` ${m.note}` : ""}\n👉 foundeat에서 참여: ${location.href.split("#")[0]}`;
       try { await navigator.clipboard.writeText(text); toast("공유 문구를 복사했어요"); } catch { prompt("아래 문구를 복사해 주세요", text); }
     }));
   }
@@ -1615,6 +1622,7 @@
   }
 
   function openMeetForm(placeId) {
+    if (isGuest()) return toast("게스트는 둘러보기만 할 수 있어요");
     state.mf = { placeId, cap: 3, note: "", q: "", sort: "rating" };
     const render = () => {
       const f = state.mf, p = f.placeId ? placeById(f.placeId) : null;
@@ -1705,7 +1713,7 @@
     if (state.store.demo) return "미리보기에서는 알림이 오지 않아요";
     if (isIOS() && !standalone()) return "아이폰은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요";
     if (!pushSupported()) return "이 브라우저는 알림을 지원하지 않아요";
-    if (Notification.permission === "denied") return "알림이 차단돼 있어요. 브라우저(또는 휴대폰) 설정에서 Lunchfound 알림을 허용해 주세요";
+    if (Notification.permission === "denied") return "알림이 차단돼 있어요. 브라우저(또는 휴대폰) 설정에서 foundeat 알림을 허용해 주세요";
     return "";
   };
   async function pushApi(body) {
@@ -1744,7 +1752,7 @@
   }
   // 시작할 때: 이미 허용한 기기는 조용히 다시 연결(누가 로그인했는지 갱신), 아직이면 한 번 권유
   function initPush() {
-    if (state.store.demo) return;
+    if (state.store.demo || isGuest()) return;
     navigator.serviceWorker?.addEventListener("message", (e) => { if (e.data?.type === "open-meet") openMeetList(); });
     const q = new URLSearchParams(location.search).get("meet");
     if (q) { history.replaceState(null, "", location.pathname); setTimeout(openMeetList, 600); }
@@ -1813,10 +1821,10 @@
     const ate = state.meetups.find((m) => m.date === TODAY() && (m.hostUid === uid || (m.joined || {})[uid]));
     showBanner({ icon: "✍️", title: "오늘 어디서 드셨어요?", sub: ate ? `${esc(meetPlace(ate).name)} 어땠는지 30초면 남길 수 있어요` : "30초면 기록 끝! 다음 사람의 점심이 쉬워져요",
       actions: [{ label: "기록하기", primary: true, run: () => (ate ? openReviewForm(ate.placeId, "visited") : openAdd()) }] });
-    sysNotify("오늘 어디서 드셨어요?", "30초면 기록 끝! Lunchfound에 남겨주세요", "record");
+    sysNotify("오늘 어디서 드셨어요?", "30초면 기록 끝! foundeat에 남겨주세요", "record");
   }
   function lunchTick() {
-    if (!state.user) return;
+    if (!state.user || isGuest()) return;
     const t = nowMins(), uid = state.user.uid;
     if (t >= minsOf("12:00") && t < minsOf(LUNCH.start) && onceToday("popular")) return nudgePopular();
     const ateToday = state.reviews.some((r) => r.uid === uid && r.status === "visited" && new Date(r.createdAt).toLocaleDateString("sv-SE") === TODAY());
@@ -1826,7 +1834,7 @@
   // ───────── "내 추천을 본 사람" (조회 기록) ─────────
   const viewedNow = new Set();
   function markView(p) {
-    if (!p || viewedNow.has(p.id) || !state.store.markView) return;
+    if (!p || isGuest() || viewedNow.has(p.id) || !state.store.markView) return;
     viewedNow.add(p.id);
     if ((p.views || {})[state.user.uid]) return;   // 이미 본 곳은 다시 쓰지 않음 (무료 한도 절약)
     state.store.markView(p.id, state.user.uid).catch(() => {});
@@ -1847,7 +1855,7 @@
   function openInstall() {
     const how = standalone() ? `<p class="empty">이미 앱으로 쓰고 있어요 👍</p>`
       : installEvt ? `<div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="doInstall">앱 설치하기</button></div>`
-      : isIOS() ? `<ol class="steps"><li><b>Safari</b>로 이 주소를 열어요</li><li>아래쪽 <b>공유 버튼(□↑)</b>을 눌러요</li><li><b>홈 화면에 추가</b> → <b>추가</b></li><li>홈 화면의 Lunchfound 아이콘으로 열면 앱처럼 전체 화면으로 열려요. 아이폰은 이렇게 추가해야 알림도 받을 수 있어요(iOS 16.4 이상)</li></ol>`
+      : isIOS() ? `<ol class="steps"><li><b>Safari</b>로 이 주소를 열어요</li><li>아래쪽 <b>공유 버튼(□↑)</b>을 눌러요</li><li><b>홈 화면에 추가</b> → <b>추가</b></li><li>홈 화면의 foundeat 아이콘으로 열면 앱처럼 전체 화면으로 열려요. 아이폰은 이렇게 추가해야 알림도 받을 수 있어요(iOS 16.4 이상)</li></ol>`
       : `<ol class="steps"><li><b>크롬</b>으로 이 주소를 열어요</li><li>오른쪽 위 <b>⋮ 메뉴</b> → <b>앱 설치</b> 또는 <b>홈 화면에 추가</b></li><li>PC 크롬은 주소창 오른쪽의 <b>설치 아이콘</b>을 눌러도 돼요</li></ol>`;
     const s = showSheet(`${head("앱으로 설치", "<span>홈 화면에 추가하면 앱처럼 전체 화면으로 열려요</span>")}${how}`, "install");
     const b = $("#doInstall", s);
@@ -1919,12 +1927,12 @@
 
   // ───────── 내 정보 ─────────
   function openMe() {
-    const m = isAdmin() ? { team: "ADMIN", role: "관리자 · 장소·기록·약속 편집 권한" } : member(state.user.name) || { team: "", role: "" };
+    const m = isAdmin() ? { team: "ADMIN", role: "관리자 · 장소·기록·약속 편집 권한" } : isGuest() ? { team: "GUEST", role: "둘러보기 전용 · 기록·찜·약속은 파파 멤버만" } : member(state.user.name) || { team: "", role: "" };
     const s = showSheet(`
       ${head("내 정보")}
       <div class="list-card" style="background:var(--parchment);margin-top:14px"><div class="member">${avatar(state.user.name)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(state.user.name)}님</div><div class="rl">${esc(m.role)}</div></div></div></div>
       <div class="field"><span class="flabel">화면 모드</span>${themeSeg()}</div>
-      <div class="field"><span class="flabel">알림</span>${pushCard()}</div>
+      ${isGuest() ? "" : `<div class="field"><span class="flabel">알림</span>${pushCard()}</div>`}
       <div class="stack" style="margin-top:18px">
         <button class="btn btn-plain btn-block" id="guideBtn">🧭 사용 방법 다시 보기</button>
         <button class="btn btn-plain btn-block" id="installBtn">📲 앱으로 설치 (홈 화면에 추가)</button>
@@ -1936,7 +1944,7 @@
     $("#installBtn", s).onclick = openInstall;
     $("#guideBtn", s).onclick = startGuide;
     bindThemeSeg(s);
-    bindPushCard(s, openMe);
+    if (!isGuest()) bindPushCard(s, openMe);
     const pp = $("#pvPopular", s); if (pp) pp.onclick = () => { closeSheet(); nudgePopular(); };
     const pr2 = $("#pvRecord", s); if (pr2) pr2.onclick = () => { closeSheet(); nudgeRecord(); };
     const pi = $("#pvIntro", s); if (pi) pi.onclick = () => { closeSheet(); showIntro(() => { $("#app").hidden = false; }); };
@@ -1958,9 +1966,15 @@
       || Math.hypot(a.r.left - cx, a.r.top - cy) - Math.hypot(b.r.left - cx, b.r.top - cy));
     return ok[0]?.b || null;
   }
-  const guideSteps = () => [
-    { hero: true, icon: `<img src="./icons/icon-192.png" alt="" />`, title: `${C.appTitle || "Lunchfound"}에 오신 걸 환영해요`,
-      html: "사옥 근처에서 멤버들이 <b>직접 다녀온 밥집</b>을 모아 둔 지도예요.<br>버튼을 하나씩 짚어 드릴게요 · 30초면 끝나요" },
+  const guideSteps = () => (isGuest() ? guestGuide() : memberGuide());
+  // 게스트용: 멤버 탭·장소 추가·오늘 약속 단계는 빼고, 마지막 안내를 둘러보기 기준으로
+  const guestGuide = () => memberGuide().filter((st) => !["#tabs", "#fab", "#meetBtn"].includes(st.el)).map((st) =>
+    st.el === "#meBtn" ? { ...st, html: "다크 모드 · 앱으로 설치, 그리고 <b>이 안내 다시 보기</b>와 로그아웃이 여기 있어요." }
+    : st.next === "시작하기" ? { ...st, title: "게스트로 둘러보는 중이에요", html: `<ol class="gd-list"><li><span><b>가게 열기</b> — 핀이나 아래 목록에서</span></li><li><span><b>별점 · 추천 메뉴 · 사진</b>은 그대로 볼 수 있어요</span></li><li><span><b>기록 · 찜 · 약속</b>은 파파 멤버만 남길 수 있어요</span></li></ol>` }
+    : st);
+  const memberGuide = () => [
+    { hero: true, icon: `<img src="./icons/icon-192.png" alt="" />`, title: `${C.appTitle || "foundeat"}에 오신 걸 환영해요`,
+      html: "같이 먹고, 같이 찾는 <b>우리 팀 맛집 지도</b>예요.<br>버튼을 하나씩 짚어 드릴게요 · 30초면 끝나요" },
     { el: guidePin, pad: 8, tapX: 0.5, title: "가게 핀", html: "핀을 누르면 사진 · 별점 · <b>추천 메뉴</b>와 사옥에서 걸어가는 길이 나와요. 숫자는 멤버들의 평균 별점이에요." },
     { el: () => (desk() ? $("#filterwrap") : $("#filterbar")), pad: 4, tapX: 0.14, title: "먹고 싶은 것만 보기", html: "🍙 혼밥 · 💸 거지맵 · 또간집 · 음식 종류를 고르면 <b>지도와 목록이 같이</b> 바뀌어요. 여러 개 골라도 돼요." },
     { el: "#tabs", pad: 4, tapX: 0.5, title: "전체 · 멤버 · 내 기록", html: "<b>멤버</b>를 누르면 그 사람이 다녀온 곳만 지도에 남아요. <b>내 기록</b>에선 내가 남긴 곳과 찜한 곳을 모아 봐요." },
@@ -2005,7 +2019,7 @@
         <div class="stack" style="margin-top:18px"><button class="btn btn-primary btn-block" id="loginGo" type="submit">로그인</button></div>
         <p class="login-err" id="loginErr" role="alert">${esc(error || "")}</p>
       </form>
-      <p class="login-help">파파 멤버만 쓸 수 있어요. 이름은 사내에서 부르는 이름 그대로(예: 태영) 적어 주세요.<br />한 번 로그인하면 이 기기에서 계속 유지돼요.</p>
+      <p class="login-help">파파 멤버는 사내에서 부르는 이름(예: 태영)으로, 손님은 ‘게스트’로 들어와요.<br />한 번 로그인하면 이 기기에서 계속 유지돼요.</p>
       ${demo ? `<p class="demo-note">미리보기 버전이에요. 실제 버전은 공용 비밀번호로 로그인하고, 기록이 멤버 모두에게 공유돼요.</p>` : ""}`;
     const nm = $("#loginName"), pw = $("#loginPw"), go = $("#loginGo"), er = $("#loginErr");
     setTimeout(() => nm.focus(), 60);
@@ -2014,10 +2028,11 @@
       let name = nm.value.trim().replace(/\s+/g, "").replace(/님$/, "");
       const isAdm = name.toLowerCase() === "admin" || name === "관리자";
       if (!name) { er.textContent = "이름을 적어 주세요."; nm.focus(); return; }
-      if (!isAdm && !member(name)) { er.textContent = "명단에 없는 이름이에요. 사내에서 부르는 이름(예: 태영)으로 적어 주세요."; nm.select(); return; }
+      const isGst = isGuestName(name);
+      if (!isAdm && !isGst && !member(name)) { er.textContent = "명단에 없는 이름이에요. 사내에서 부르는 이름(예: 태영)이나 ‘게스트’로 적어 주세요."; nm.select(); return; }
       if (!demo && !pw.value) { er.textContent = "비밀번호를 입력해 주세요."; pw.focus(); return; }
       go.disabled = true; go.textContent = "확인 중…"; er.textContent = "";
-      try { await state.store.signIn(isAdm ? (demo ? "관리자" : "admin") : name, pw.value); }
+      try { await state.store.signIn(isAdm ? (demo ? "관리자" : "admin") : isGst ? "게스트" : name, pw.value); }
       catch (err) { er.textContent = err.userMsg || "로그인하지 못했어요."; go.disabled = false; go.textContent = "로그인"; pw.select(); }
     };
   }
@@ -2068,6 +2083,8 @@
 
   async function start(user) {
     state.user = user;
+    // 게스트: 멤버 탭·내 기록 탭·장소 추가·오늘 약속 버튼을 숨김 (CSS :root.guest)
+    document.documentElement.classList.toggle("guest", !!user.guest);
     $("#login").hidden = true; if (!$("#intro").classList.contains("auto")) $("#intro").hidden = true; $("#app").hidden = false;   // 자동 소개 모션 중이면 그 뒤에서 미리 준비
     const me = $("#meBtn"); me.style.background = hue(user.name);
     me.innerHTML = `${esc(user.name.charAt(0))}${photoOf(user.name) ? `<img src="${photoOf(user.name)}" alt="" onerror="this.remove()">` : ""}`;
@@ -2095,7 +2112,7 @@
       // 좌표가 글자로 저장된 가게도 숫자로 맞추고, 좌표가 아예 없는 가게는 지도·목록에서 빼서 나머지가 막히지 않게
       const fixed = places.map((p) => ({ ...p, lat: +p.lat, lng: +p.lng, ...(CAT_ALIAS[p.category] ? { category: CAT_ALIAS[p.category] } : {}) }));
       const bad = fixed.filter((p) => !Number.isFinite(p.lat) || !Number.isFinite(p.lng) || !p.lat || !p.lng);
-      if (bad.length) console.warn("[Lunchfound] 위치 정보가 없는 가게", bad.map((p) => p.name));
+      if (bad.length) console.warn("[foundeat] 위치 정보가 없는 가게", bad.map((p) => p.name));
       state.places = fixed.filter((p) => !bad.includes(p)); state.badPlaces = bad; state.reviews = reviews;
       safe("오늘 약속", () => onMeetups(meetups || []));
       if (state.pending && places.some((p) => p.id === state.pending.id)) state.pending = null;
@@ -2104,7 +2121,7 @@
       if (firstView) { firstView = false; if (state.mapReady) setTimeout(() => homeView(true), 450); setTimeout(maybeGuide, 1600); }
     }, (code) => {
       // 목록을 받다가 오류: 로그인 만료(권한)면 토큰을 새로 받아 한 번 더, 그 밖엔 연결 문제로 안내
-      console.error("[Lunchfound] 가게 목록 오류:", code);
+      console.error("[foundeat] 가게 목록 오류:", code);
       if (gotData) return;
       clearTimeout(slow);
       dataNotice(/permission|unauth/.test(code) ? "auth" : "slow");
@@ -2144,7 +2161,7 @@
 
   // ───────── 시작 ─────────
   (async function boot() {
-    // 로고: 보내주신 "// Lunchfound" 이미지 (없으면 글자로)
+    // 로고: 보내주신 "// foundeat" 이미지 (없으면 글자로)
     const n = C.appName, i = n.indexOf("//");
     const brand = C.logo?.black ? `<img class="logo" src="${C.logo.black}" alt="${esc(C.appTitle || n)}" />`
       : i < 0 ? esc(n) : `${esc(n.slice(0, i))}<span class="chop" aria-hidden="true">//</span><b>${esc(n.slice(i + 2))}</b>`;
@@ -2180,12 +2197,12 @@
         return showIntro(login);   // 로그인 전 첫 화면: 모션그래픽 소개 + 시작하기 버튼
       }
       const prof = await state.store.getProfile(u.uid);
-      if (prof?.memberName && (member(prof.memberName) || prof.admin)) {
+      if (prof?.memberName && (member(prof.memberName) || prof.admin || prof.guest)) {
         started = true;
         // 앱 실행: 스플래시 → 지도 모션(버튼 없음) → 홈. 그동안 뒤에서 지도·데이터를 준비
         await afterSplash;
         if (!skipIntro) showIntro(() => { $("#app").hidden = false; }, true);
-        return start({ ...u, name: prof.memberName, admin: !!prof.admin });
+        return start({ ...u, name: prof.memberName, admin: !!prof.admin, guest: !!prof.guest });
       }
       window.__pickMember = async (name) => { await state.store.setProfile(u.uid, name); started = true; start({ ...u, name }); };
       showLogin();

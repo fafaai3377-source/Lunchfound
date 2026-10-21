@@ -1,21 +1,15 @@
 {
-  "name": "Lunchfound — 사옥 근처 점심 지도",
-  "short_name": "Lunchfound",
-  "description": "우리 팀이 직접 가본 사옥 근처 밥집 지도",
+  "name": "foundeat",
+  "short_name": "foundeat",
+  "description": "같이 먹고, 같이 찾는 우리 팀 맛집 지도",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#6E1519",
+  "background_color": "#DA2C23",
   "theme_color": "#F5F5F7",
   "icons": [
-    {
-      "src": "icons/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",

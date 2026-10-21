@@ -1,14 +1,15 @@
 // ─────────────────────────────────────────────
-//  Lunchfound 설정 — 여기만 고치면 됩니다
+//  foundeat 설정 — 여기만 고치면 됩니다
 // ─────────────────────────────────────────────
 window.CONFIG = {
-  // 서비스 이름. 로고는 lunch//found — 가운데 "//"가 젓가락 모티프로 파랗게 표시돼요
-  appName: "lunch//found",
-  appTitle: "Lunchfound",
-  // 로고 이미지 (보내주신 // Lunchfound). 밝은 화면엔 검정, 스플래시(버건디)엔 흰색
+  // 서비스 이름 foundeat(파운드잇) = found + eat, "찾았다(found it)"처럼 들리는 이름 (2026.10.21 Lunchfound에서 바꿈)
+  appName: "foundeat",
+  appTitle: "foundeat",
+  tagline: "같이 먹고, 같이 찾는 우리 팀 맛집 지도",
+  // 로고 이미지 (보내주신 // foundeat 원본에서 그대로 뽑음). 밝은 화면엔 검정, 스플래시(빨강)엔 흰색
   logo: { black: "./brand/logo-black.png", white: "./brand/logo-white.png", mark: "./brand/mark-black.png" },
-  // 브랜드 색: 스플래시 · 앱 아이콘 · 파비콘에 쓰는 버건디 (UI 버튼 강조색은 styles.css의 --accent)
-  brandColor: "#6E1519",
+  // 브랜드 색: 스플래시 · 앱 아이콘 · 파비콘에 쓰는 빨강 (UI 버튼 강조색은 styles.css의 --accent)
+  brandColor: "#DA2C23",
 
   // 사옥 위치 (네이버 지도에 등록된 파운드파운디드 좌표)
   office: { name: "사옥", lat: 37.5561767, lng: 126.9190359,

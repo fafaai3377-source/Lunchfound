@@ -470,7 +470,7 @@ input { font: inherit; color: inherit; }
 /* 앱 화면은 고정 화면 — 브라우저가 포커스 이동 등으로 몰래 스크롤하지 못하게 (화면 밀림 방지) */
 .app, .map { overflow: clip; }
 
-/* 로고 lunch//found — 가운데 두 슬래시를 젓가락처럼: 파란색, 살짝 기울여 강조 */
+/* 글자 로고(로고 이미지가 없을 때) — 가운데 두 슬래시를 살짝 기울여 강조 */
 .chop { color: var(--accent); font-weight: 600; letter-spacing: -0.12em; margin: 0 .06em 0 -.02em; display: inline-block; transform: skewX(-8deg); }
 .intro:not([hidden]) .intro-brand .chop { animation: chopIn 520ms var(--ease-spring) 700ms both; }
 @keyframes chopIn { from { opacity: 0; transform: translateY(-8px) skewX(-8deg) rotate(-12deg); } to { opacity: 1; transform: skewX(-8deg); } }
@@ -478,7 +478,7 @@ input { font: inherit; color: inherit; }
 .dir-note { font-size: 12px; color: var(--ink-3); text-align: center; margin: 6px 0 0; }
 
 /* ───────── 브랜드 (로고 · 스플래시) ───────── */
-:root { --brand: #6E1519; }
+:root { --brand: #DA2C23; }   /* foundeat 빨강 (로고 원본 색) */
 .logo { display: block; height: 100%; width: auto; }
 .brand-pill .logo { height: 17px; }
 .brand-big { height: 44px; margin-bottom: 4px; }
@@ -497,7 +497,7 @@ input { font: inherit; color: inherit; }
 .brand-big .logo { height: auto; width: min(100%, 300px); }
 .intro-brand .logo { height: auto; width: min(100%, 280px); margin: 0 auto; }
 .brand-pill .logo-mark { display: none; height: 17px; width: auto; }
-/* 모바일도 로고(// Lunchfound) 전체를 보여줌 — 헤더 한 줄에 들어가도록 크기만 줄임 */
+/* 모바일도 로고(// foundeat) 전체를 보여줌 — 헤더 한 줄에 들어가도록 크기만 줄임 */
 @media (max-width: 480px) {
   .brand-pill { padding: 0 14px; }
   .topbar .brand-pill { padding: 0 2px 0 2px; height: 40px; min-width: 0; flex: 0 1 auto; }
@@ -995,3 +995,9 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .ic-again { display: inline-block; flex: none; width: 1em; height: 1em; margin-right: .24em; vertical-align: -0.15em; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .chip .ic-again { width: .95em; height: .95em; margin-right: .3em; vertical-align: -0.12em; }
 .visit-n .ic-again { width: .95em; height: .95em; margin-right: .2em; }
+
+/* ═════════ 게스트 (둘러보기 전용, 10/21) ═════════ */
+:root.guest #fab, :root.guest #meetBtn, :root.guest #tabs [data-tab="member"], :root.guest #tabs [data-tab="mine"] { display: none !important; }
+.guest-note { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--parchment); font-size: 14px; line-height: 1.5; color: var(--ink-2); text-align: center; word-break: keep-all; }
+.avatar.anon { background: var(--fill-2); color: var(--ink-3); display: inline-grid; place-items: center; }
+.avatar.anon svg { width: 70%; height: 70%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }

@@ -27,16 +27,37 @@
       // 오랜만에 열면 로그인 토큰을 새로 받아야 함 — 휴대폰이 막 깨어나 연결이 불안정하면 실패할 수 있어서 3번까지 다시 시도
       let t = null;
       for (let i = 0; i < 3 && !t; i++) {
-        t = await u.getIdTokenResult().catch((e) => { console.warn("[Lunchfound] 로그인 토큰 갱신 실패", e?.code || e); return null; });
+        t = await u.getIdTokenResult().catch((e) => { console.warn("[foundeat] 로그인 토큰 갱신 실패", e?.code || e); return null; });
         if (!t) await new Promise((r) => setTimeout(r, 800 * (i + 1)));
       }
       // 연결 문제로 토큰을 못 받은 경우엔 로그아웃시키지 않음 (다음에 열면 그대로 로그인 상태)
       if (!t) return userCb(null, "인터넷 연결이 불안정해요. 잠시 뒤 새로고침해 주세요.");
+      // 게스트(둘러보기 전용): 토큰에 member 대신 guest가 있음
+      if (t.claims?.guest === true) { current = { uid: u.uid, name: "게스트", guest: true }; return userCb(current); }
       const name = t.claims?.member;
       if (!name) { await A.signOut(auth); return userCb(null, "다시 로그인해 주세요."); }
       current = { uid: u.uid, name, admin: t?.claims?.admin === true };
       userCb(current);
     });
+    // 게스트: Firestore 대신 /api/guest (이름을 뺀 가게·기록)를 받아옴 — 실시간 대신 1분마다, 앱을 다시 볼 때마다 새로
+    async function guestFetch(q = "") {
+      const tok = await auth.currentUser?.getIdToken();
+      const r = await fetch(`/api/guest${q}`, { headers: { Authorization: `Bearer ${tok}` } });
+      if (!r.ok) { const e = new Error("GUEST_FAIL"); e.code = r.status === 401 ? "unauthenticated" : "unavailable"; throw e; }
+      return r.json();
+    }
+    function guestSubscribe(cb, onErr) {
+      const load = async () => {
+        try {
+          const j = await guestFetch();
+          cb({ places: j.places || [], reviews: (j.reviews || []).map((r) => (r.rating2 > 0 ? { ...r, rating: r.rating2 / 2 } : r)), meetups: [] });
+        } catch (e) { console.error("[foundeat] 게스트 목록 오류", e); onErr?.(e.code || "error", "places"); }
+      };
+      load();
+      clearInterval(this._guestTimer); this._guestTimer = setInterval(load, 60000);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+      this.retry = load;
+    }
     const toArr = (s) => s.docs.map((d) => { const v = d.data(); return { id: d.id, ...v, createdAt: v.createdAt?.toMillis?.() ?? Date.now() }; });
     return {
       demo: false,
@@ -50,16 +71,17 @@
       },
       signOut: () => A.signOut(auth),
       idToken: () => auth.currentUser?.getIdToken() ?? Promise.resolve(null),
-      async getProfile() { return current ? { memberName: current.name, admin: current.admin } : null; },
+      async getProfile() { return current ? { memberName: current.name, admin: current.admin, guest: !!current.guest } : null; },
       async setProfile() {},
       // onErr(code): 가게·기록 목록을 받다가 오류가 나면 알려줌 (권한 오류는 토큰을 새로 받아 한 번 자동 재시도)
       subscribe(cb, onErr) {
+        if (current?.guest) return guestSubscribe.call(this, cb, onErr);
         const st = { places: [], reviews: [], meetups: [] };
         // 가게 목록과 기록을 둘 다 처음 받기 전에는 화면에 내보내지 않음 (잠깐 "가게 0곳"·"기록 없음"으로 보이는 순간이 생기지 않게)
         let gotPlaces = false, gotReviews = false, retried = false, unsubs = [];
         const emit = () => { if (gotPlaces && gotReviews) cb({ places: [...st.places], reviews: [...st.reviews], meetups: [...st.meetups] }); };
         const fail = (what) => async (e) => {
-          console.error(`[Lunchfound] ${what} 목록 오류`, e?.code, e);
+          console.error(`[foundeat] ${what} 목록 오류`, e?.code, e);
           if (what !== "meetups" && /permission|unauth/.test(e?.code || "") && !retried) { retried = true; await auth.currentUser?.getIdToken(true).catch(() => {}); return listen(); }
           if (what !== "meetups") onErr?.(e?.code || "error", what);
         };
@@ -79,7 +101,7 @@
       async addPlace(d) { const r = await F.addDoc(F.collection(db, "places"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       updatePlace: (id, patch) => F.updateDoc(F.doc(db, "places", id), patch),
       // 상세를 처음 연 멤버를 places.views.{uid}에 한 번만 기록 ("내 추천을 본 사람")
-      markView: (id, uid) => F.updateDoc(F.doc(db, "places", id), { [`views.${uid}`]: true }),
+      markView: (id, uid) => (current?.guest ? Promise.resolve() : F.updateDoc(F.doc(db, "places", id), { [`views.${uid}`]: true })),
       deletePlace: (id) => F.deleteDoc(F.doc(db, "places", id)),
       async addReview(d) { const h = Math.round((+d.rating || 0) * 2); const r = await F.addDoc(F.collection(db, "reviews"), { ...d, rating: Math.floor(h / 2), rating2: h, createdAt: F.serverTimestamp() }); return r.id; },
       deleteReview: (id) => F.deleteDoc(F.doc(db, "reviews", id)),
@@ -88,6 +110,7 @@
       // 멤버 사진: 원본 크기 사진은 photos 컬렉션에 따로 두고, 가게를 열 때만 불러옴 (앱이 무거워지지 않게)
       async addPhoto(d) { const r = await F.addDoc(F.collection(db, "photos"), { ...d, createdAt: F.serverTimestamp() }); return r.id; },
       async listPhotos(placeId) {
+        if (current?.guest) { const j = await guestFetch(`?photos=${encodeURIComponent(placeId)}`); return j.photos || []; }
         const snap = await F.getDocs(F.query(F.collection(db, "photos"), F.where("placeId", "==", placeId)));
         return toArr(snap).sort((a, b) => b.createdAt - a.createdAt);
       },
@@ -134,16 +157,26 @@
     let sub = () => {}, userCb = () => {};
     data.meetups = (data.meetups || []).filter((m) => m.date >= today()); // 지난 날 약속은 정리
     data.photos = data.photos || [];
-    const emit = () => sub({ places: [...data.places], reviews: [...data.reviews], meetups: data.meetups.map((m) => ({ ...m, joined: { ...m.joined } })) });
+    const emit = () => sub(isGuest() ? anonView() : { places: [...data.places], reviews: [...data.reviews], meetups: data.meetups.map((m) => ({ ...m, joined: { ...m.joined } })) });
     const save = () => { set(KEY, JSON.stringify(data)); emit(); };
     const id = () => Math.random().toString(36).slice(2, 10);
-    const userOf = (n) => ({ uid: "demo-" + n, email: "preview@local", name: n, admin: n === "관리자" });
+    const userOf = (n) => ({ uid: "demo-" + n, email: "preview@local", name: n, admin: n === "관리자", guest: n === "게스트" });
+    // 미리보기에서도 게스트는 실제와 똑같이 이름을 뺀 데이터만 봄
+    const isGuest = () => get(NKEY) === "게스트";
+    const anonView = () => {
+      const ids = new Map(), aid = (u) => { if (!ids.has(u)) ids.set(u, "g" + (ids.size + 1)); return ids.get(u); };
+      return {
+        places: data.places.map((p) => ({ ...p, createdBy: "", createdByName: "", views: Object.fromEntries(Object.keys(p.views || {}).map((k, i) => ["v" + i, true])), images: (p.images || []).map((im) => ({ ...im, by: "", uid: "" })) })),
+        reviews: [...data.reviews].sort((a, b) => a.createdAt - b.createdAt).map((r) => ({ ...r, uid: aid(r.uid), userName: "" })),
+        meetups: [],
+      };
+    };
     return {
       demo: true,
       onUser(cb) { userCb = cb; const n = get(NKEY); setTimeout(() => cb(n ? userOf(n) : null), 0); },
       async signIn(memberName) { set(NKEY, memberName); userCb(userOf(memberName)); },
       async signOut() { try { localStorage.removeItem(NKEY); } catch {} },
-      async getProfile(uid) { const n = uid.replace(/^demo-/, ""); return n ? { memberName: n, admin: n === "관리자" } : null; },
+      async getProfile(uid) { const n = uid.replace(/^demo-/, ""); return n ? { memberName: n, admin: n === "관리자", guest: n === "게스트" } : null; },
       async setProfile() {},
       reset() { try { localStorage.removeItem(KEY); localStorage.removeItem(NKEY); } catch {} },
       subscribe(cb) { sub = cb; emit(); },
@@ -153,7 +186,7 @@
       async deletePlace(pid) { data.places = data.places.filter((p) => p.id !== pid); data.reviews = data.reviews.filter((r) => r.placeId !== pid); data.photos = data.photos.filter((x) => x.placeId !== pid); save(); },
       async addReview(d) { const i = id(); data.reviews.push({ id: i, ...d, createdAt: Date.now() }); save(); return i; },
       async addPhoto(d) { const i = id(); data.photos.push({ id: i, ...d, createdAt: Date.now() }); try { save(); } catch { data.photos.pop(); throw new Error("미리보기 저장 공간이 부족해요"); } return i; },
-      async listPhotos(pid) { return data.photos.filter((x) => x.placeId === pid).sort((a, b) => b.createdAt - a.createdAt); },
+      async listPhotos(pid) { return data.photos.filter((x) => x.placeId === pid).sort((a, b) => b.createdAt - a.createdAt).map((x) => (isGuest() ? { ...x, uid: "", userName: "" } : x)); },
       async deletePhotosOf(field, value) { data.photos = data.photos.filter((x) => x[field] !== value); save(); },
       async deletePhoto(pid) { data.photos = data.photos.filter((x) => x.id !== pid); save(); },
       async updateReview(rid, d) { const r = data.reviews.find((x) => x.id === rid); if (r) Object.assign(r, d, { updatedAt: Date.now() }); save(); },

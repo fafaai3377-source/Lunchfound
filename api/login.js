@@ -6,6 +6,7 @@
 //   LOGIN_PASSWORD_HASH       공용 비밀번호 해시 — SHA-256(16진수 64자 또는 base64) · bcrypt($2a$/$2b$) 모두 인식
 //   FIREBASE_SERVICE_ACCOUNT  Firebase 서비스 계정 키 — JSON 원문 또는 base64 모두 인식
 //   ADMIN_PASSWORD_HASH       관리자 비밀번호 해시 — 형식은 위와 같음 (이름 "admin"으로 로그인)
+//   GUEST_PASSWORD_HASH       게스트 비밀번호 해시 — 형식은 위와 같음 (이름 "게스트" 또는 "guest"로 로그인, 둘러보기 전용)
 //   (예전 이름 LUNCH_PASSWORD_HASH, FIREBASE_SERVICE_ACCOUNT_B64도 계속 읽어요)
 const crypto = require("crypto");
 const admin = require("firebase-admin");
@@ -29,7 +30,7 @@ const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(a, b);
 // 저장된 값 형식을 알아보고 비교: true(맞음) / false(틀림) / null(설정 없음)
 // 인식 순서: bcrypt → SHA-256(16진수) → SHA-256(base64/base64url) → 그 외에는 비밀번호 원문으로 보고 비교
 function storedSecret(kind) {
-  let v = String(kind === "admin" ? process.env.ADMIN_PASSWORD_HASH || "" : process.env.LOGIN_PASSWORD_HASH || process.env.LUNCH_PASSWORD_HASH || "").trim();
+  let v = String(kind === "admin" ? process.env.ADMIN_PASSWORD_HASH || "" : kind === "guest" ? process.env.GUEST_PASSWORD_HASH || "" : process.env.LOGIN_PASSWORD_HASH || process.env.LUNCH_PASSWORD_HASH || "").trim();
   v = v.replace(/^["'`]+|["'`]+$/g, "").trim();          // 실수로 들어간 따옴표 제거
   return v;
 }
@@ -53,17 +54,21 @@ module.exports = async (req, res) => {
   const name = String(body?.name || "").trim(), password = String(body?.password || "");
   // 관리자: 이름 "admin" + 관리자 비밀번호 → 모든 장소·기록·약속을 지우고 고칠 수 있는 권한(admin)
   const isAdmin = name.toLowerCase() === "admin" || name === "관리자";
-  const member = isAdmin ? { name: "관리자", team: "ADMIN" } : MEMBERS.find((m) => m.name === name);
+  // 게스트: 이름 "게스트"(또는 guest) + 게스트 비밀번호 → 둘러보기만 (기록·찜·약속 불가, 누가 남겼는지 이름은 안 보임)
+  const isGuest = /^(게스트|guest)$/i.test(name);
+  const member = isAdmin ? { name: "관리자", team: "ADMIN" } : isGuest ? { name: "게스트", team: "GUEST" } : MEMBERS.find((m) => m.name === name);
   if (!member) return res.status(400).json({ error: "명단에 없는 이름이에요" });
 
-  const ok = await checkPassword(password, isAdmin ? "admin" : "member");
-  if (ok === null) return res.status(500).json({ error: isAdmin ? "서버에 관리자 비밀번호 설정(ADMIN_PASSWORD_HASH)이 없어요" : "서버에 비밀번호 설정(LOGIN_PASSWORD_HASH)이 없어요" });
+  const kind = isAdmin ? "admin" : isGuest ? "guest" : "member";
+  const ok = await checkPassword(password, kind);
+  if (ok === null) return res.status(500).json({ error: { admin: "서버에 관리자 비밀번호 설정(ADMIN_PASSWORD_HASH)이 없어요", guest: "서버에 게스트 비밀번호 설정(GUEST_PASSWORD_HASH)이 없어요", member: "서버에 비밀번호 설정(LOGIN_PASSWORD_HASH)이 없어요" }[kind] });
   if (!ok) { await sleep(600); return res.status(401).json({ error: "비밀번호가 달라요" }); }   // 연속 대입을 늦추기 위한 지연
 
   try {
     // 같은 이름은 항상 같은 계정 번호(uid) → 기록·약속이 그 멤버에게 계속 연결돼요
-    const uid = isAdmin ? "admin" : "m_" + sha256("lunchfound:" + name).slice(0, 24);
-    const claims = isAdmin ? { member: "관리자", team: "ADMIN", admin: true } : { member: name, team: member.team };
+    const uid = isAdmin ? "admin" : isGuest ? "guest" : "m_" + sha256("lunchfound:" + name).slice(0, 24);   // ("lunchfound:"는 예전 이름이지만 계정 번호가 바뀌지 않게 그대로 둠)
+    // 게스트 토큰엔 member가 없음 → 보안 규칙상 Firestore를 직접 읽거나 쓸 수 없고, /api/guest가 이름을 뺀 데이터만 내려줌
+    const claims = isAdmin ? { member: "관리자", team: "ADMIN", admin: true } : isGuest ? { guest: true } : { member: name, team: member.team };
     const token = await admin.auth(firebaseApp()).createCustomToken(uid, claims);
     return res.status(200).json({ token });
   } catch (e) {

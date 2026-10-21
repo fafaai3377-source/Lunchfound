@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <!-- 상단 상태바 색: 스플래시 동안만 버건디, 그 뒤엔 화면 배경색과 같게 (app.js applyTheme) -->
-  <meta name="theme-color" content="#6E1519" />
+  <meta name="theme-color" content="#DA2C23" />
   <meta name="color-scheme" content="light dark" />
   <!-- 화면 모드: 라이트 / 다크 / 기기 설정 (내 정보·로그인 화면에서 선택, 기본은 라이트). 그리기 전에 적용해서 깜빡임 없음 -->
   <script>
@@ -14,15 +14,14 @@
       document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
     })();
   </script>
-  <title>Lunchfound</title>
-  <meta name="description" content="우리 팀이 직접 가본 사옥 근처 밥집 지도" />
+  <title>foundeat</title>
+  <meta name="description" content="같이 먹고, 같이 찾는 우리 팀 맛집 지도" />
   <!-- 지도는 스플래시·로그인 확인 동안 미리 받아둠 (라이브러리는 우리 사이트에, 지도 그림은 OpenFreeMap에서) -->
   <link rel="preload" href="./vendor/maplibre-gl-4.7.1/maplibre-gl.js" as="script" />
   <link rel="preload" href="./vendor/maplibre-gl-4.7.1/maplibre-gl.css" as="style" />
   <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
   <!-- 앱으로 설치 (PWA) -->
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
   <link rel="alternate icon" href="./icons/favicon.ico" />
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
@@ -37,7 +36,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Lunchfound" />
+  <meta name="apple-mobile-web-app-title" content="foundeat" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -79,7 +78,7 @@
         <div class="iwalk">걸어서 4분</div>
       </div>
       <h1 class="intro-brand" id="introBrand"></h1>
-      <p class="intro-copy">우리 팀이 직접 가본 사옥 근처 밥집 지도.<br />먹은 곳을 남기고, 같이 갈 사람을 모아요.</p>
+      <p class="intro-copy">같이 먹고, 같이 찾는 우리 팀 맛집 지도.<br />다녀온 곳을 남기고, 같이 먹을 사람을 모아요.</p>
       <button class="btn btn-primary btn-block intro-go" id="introGo">시작하기</button>
     </div>
   </section>
@@ -89,7 +88,7 @@
     <button class="theme-btn" id="themeBtnLogin" type="button" aria-label="화면 모드 바꾸기"></button>
     <div class="login-inner">
       <h1 class="brand-big" id="loginBrand"></h1>
-      <p class="login-copy">우리 팀이 직접 가본<br />사옥 근처 밥집 지도.</p>
+      <p class="login-copy">같이 먹고, 같이 찾는<br />우리 팀 맛집 지도.</p>
       <div id="loginBody"></div>
     </div>
   </section>
