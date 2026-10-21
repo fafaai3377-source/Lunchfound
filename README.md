@@ -9,6 +9,7 @@
 | `index.html` · `styles.css` · `app.js` | 화면, 디자인·모션, 기능 |
 | `members.js` · `seeds.js` | 멤버 명단, 기본 가게 25곳 |
 | `store.js` · `map-kakao.js` · `walk.js` · `walk-graph.json` | 데이터, 카카오맵, 도보 길찾기 |
+| `stores.js` · `stores.json` · `tools/build-stores.py` | 사옥 반경 2km 식당 목록(공공데이터 상가정보) — 장소 추가 검색·지도 점·주소 찾기. 분기마다 새 파일로 다시 만들기 |
 | `manifest.webmanifest` · `sw.js` · `icons/` | 앱으로 설치(홈 화면 추가), 오프라인, 알림 |
 | `api/place-image.js` | 블로그 대표 사진을 찾아주는 서버 함수 |
 | `firestore.rules` | 데이터 보안 규칙 (바뀔 때마다 다시 게시) |
@@ -96,3 +97,4 @@
 - 비용: 카카오맵(하루 30만 회)·카카오 검색·Firebase Spark·Vercel Hobby 모두 무료 한도 안이에요.
 - 사진은 블로그 글의 대표 미리보기 이미지를 링크로 보여주는 방식이에요. 사진 아래 출처 버튼으로 원문 블로그가 열려요. 사진의 저작권은 각 블로거에게 있으니, 사내용으로만 쓰고 외부 공개는 하지 않는 걸 권해요.
 - 도보 시간은 직선거리 × 1.3 ÷ 분당 75m로 계산한 대략값이에요.
+- 장소 추가의 가게 목록은 소상공인시장진흥공단 상가(상권)정보(공공데이터포털, 이용허락범위 제한 없음)예요. 분기마다 갱신돼서 최근 문 연 가게는 빠질 수 있어요. 새 분기 파일을 받으면 `python3 tools/build-stores.py 받은파일.zip 기준일` → `sw.js` VERSION 올려서 푸시.

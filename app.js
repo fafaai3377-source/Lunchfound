@@ -48,6 +48,8 @@
     기타: [],
   };
   const subGuess = (cat, name = "") => (SUBS[cat] || []).find((x) => name.includes(x)) || "";
+  // 검색 결과의 세부 종류: 가게 이름에서 먼저, 없으면 공공데이터 업종 이름에서 (예: "국수/만두/칼국수" → 칼국수는 목록에 없으니 빈칸)
+  const subFor = (cat, r) => subGuess(cat, r.name) || (SUBS[cat] || []).find((x) => String(r.sub || "").includes(x)) || "";
   const CATS = Object.keys(CAT_EMOJI);
   const catLabel = (c) => `${CAT_EMOJI[c] || "🍴"} ${c}`;
   function catFrom(raw, name = "") {
@@ -1052,30 +1054,61 @@
     `, "add");
     const q = $("#q", s);
     let t;
-    q.oninput = () => { clearTimeout(t); t = setTimeout(() => runSearch(q.value.trim()), 250); };
+    q.oninput = () => { clearTimeout(t); t = setTimeout(() => runSearch(q.value.trim()), 200); };
     $("#pinMode", s).onclick = startPinMode;
     $("#addrMode", s).onclick = () => openAddrForm(q.value.trim());
+    window.Stores?.load();   // 사옥 주변 식당 목록은 이 화면을 처음 열 때 한 번만 불러옴
     setTimeout(() => q.focus(), 60);
   }
+  // 가게 이름 비교용: 띄어쓰기·기호 무시
+  const nameKey = (s) => String(s || "").toLowerCase().replace(/[\s\-_.·,()[\]'"!&@#/+:~]/g, "");
+  const meters = (a, b, c, d) => { const R = 6371000, r = (x) => (x * Math.PI) / 180, h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  // 이미 등록된 곳인지: 같은 이름이거나, 40m 안에 이름이 겹치는 곳 (예: "스타벅스" ↔ "스타벅스 홍대역점")
+  function findExisting(r) {
+    const n = nameKey(r.name);
+    return state.places.find((p) => {
+      if (r.kakaoId && p.kakaoId === r.kakaoId) return true;
+      const pn = nameKey(p.name);
+      if (pn === n) return true;
+      return p.lat != null && r.lat != null && meters(p.lat, p.lng, r.lat, r.lng) < 40 && (pn.includes(n) || n.includes(pn));
+    });
+  }
+  const floorLabel = (f) => { f = String(f || "").trim(); if (!f) return ""; if (/^반지/.test(f)) return "반지하"; const b = f.match(/^(?:지하|지|B)\s*(\d*)/i); if (b) return b[1] ? `지하 ${b[1]}층` : "지하"; return /^\d+$/.test(f) ? `${f}층` : f; };
+  const resultHTML = (r, i, key = "i") => {
+    const cat = catFrom(r.categoryRaw, r.name);
+    const extra = [r.address, r.floor && floorLabel(r.floor)].filter(Boolean).join(" · ");
+    return `<button class="result" data-${key}="${i}"><div style="flex:1;min-width:0"><div class="nm">${esc(r.name)}${findExisting(r) ? ` <span class="tag">이미 있음</span>` : ""}</div><div class="ad">${emojiFor({ name: r.name, category: cat })} ${esc(cat)}${extra ? ` · ${esc(extra)}` : ""}</div></div><span class="ds">도보 ${walkMin(r.lat, r.lng)}분</span></button>`;
+  };
+  const srcNote = () => { const i = window.Stores?.info(); return i ? `<p class="src-note">가게 정보 · 소상공인시장진흥공단 상가정보 (${i.asof.slice(0, 4)}.${+i.asof.slice(5, 7)} 기준) · 최근 문 연 곳은 없을 수 있어요</p>` : ""; };
+  // 검색: ① 사옥 주변 식당 목록(공공데이터)에서 바로 → ② OpenStreetMap 결과 중 겹치지 않는 것만 뒤에 덧붙임
+  let searchSeq = 0;
   async function runSearch(query) {
     const box = $("#results");
     if (!box) return;
+    const seq = ++searchSeq, live = () => seq === searchSeq && state.sheet === "add" && $("#results");
     if (!query) { box.innerHTML = ""; return; }
-    const list = await MapKit.search(query);
-    if (state.sheet !== "add") return;
-    box.innerHTML = list.length ? list.slice(0, 12).map((r, i) => {
-      const exists = state.places.find((p) => (r.kakaoId && p.kakaoId === r.kakaoId) || p.name.replace(/\s/g, "") === r.name.replace(/\s/g, ""));
-      return `<button class="result" data-i="${i}"><div style="flex:1;min-width:0"><div class="nm">${esc(r.name)}${exists ? ` <span class="tag">이미 있음</span>` : ""}</div><div class="ad">${emojiFor({ name: r.name, category: catFrom(r.categoryRaw, r.name) })} ${esc(catFrom(r.categoryRaw, r.name))} · ${esc(r.address || "")}</div></div><span class="ds">도보 ${walkMin(r.lat, r.lng)}분</span></button>`;
-    }).join("") : `<p class="empty">검색 결과가 없어요. 이름을 줄여서 찾거나, 아래 <b>주소로 등록</b>을 눌러주세요.</p>`;
-    $$("[data-i]", box).forEach((b) => (b.onclick = () => pickResult(list[+b.dataset.i])));
+    const draw = (list, more) => {
+      const b = $("#results"); if (!b) return;
+      b.innerHTML = list.length ? list.map((r, i) => resultHTML(r, i)).join("") + (list.some((r) => r.src === "sg") ? srcNote() : "")
+        : more ? `<p class="empty">찾는 중…</p>` : `<p class="empty">검색 결과가 없어요. 이름을 줄여서 찾거나, 아래 <b>주소로 등록</b>·<b>지도에서 찍기</b>를 눌러주세요.</p>`;
+      $$("[data-i]", b).forEach((x) => (x.onclick = () => pickResult(list[+x.dataset.i])));
+    };
+    await window.Stores?.load();
+    if (!live()) return;
+    const local = window.Stores?.search(query, 12) || [];
+    draw(local, true);
+    const osm = await MapKit.search(query);
+    if (!live()) return;
+    const extra = osm.filter((r) => !local.some((l) => { const a = nameKey(l.name), b = nameKey(r.name); return (a === b || a.includes(b) || b.includes(a)) && meters(l.lat, l.lng, r.lat, r.lng) < 120; }));
+    draw([...local, ...extra].slice(0, 15), false);
   }
   async function pickResult(r) {
-    const exists = state.places.find((p) => (r.kakaoId && p.kakaoId === r.kakaoId) || p.name.replace(/\s/g, "") === r.name.replace(/\s/g, ""));
+    const exists = findExisting(r);
     if (exists) return openPlace(exists.id);
     // 검색 결과로 등록할 때도 종류를 한 번 고르게 (자동으로 추측한 종류를 미리 골라둠)
     const guess = catFrom(r.categoryRaw, r.name);
     const f = { category: guess === "기타" ? "" : guess, note: "" };
-    f.note = subGuess(f.category, r.name);
+    f.note = subFor(f.category, r);
     const render = () => {
       const s = showSheet(`
         ${head(esc(r.name), `<b>사옥에서 도보 ${walkMin(r.lat, r.lng)}분</b>${r.address ? `<span>${esc(r.address)}</span>` : ""}`)}
@@ -1122,10 +1155,42 @@
     if (!state.mapReady) return toast("지도가 아직 준비되지 않았어요");
     $("#sheet").hidden = true; $("#scrim").hidden = true; state.sheet = null;
     state.adding = true; $("#addbar").hidden = false; $("#fab").hidden = true; MapKit.setAdding(true);
+    // 주변 식당을 빨간 점 + 이름으로 띄움 → 점을 누르면 그 가게로 바로 (목록에 없는 곳은 지금처럼 빈 곳을 찍기)
+    window.Stores?.load().then((ok) => { if (ok && state.adding) MapKit.showStores?.(Stores.geojson((r) => !!findExisting(r)), onStoreGroup); });   // 이미 등록된 곳은 우리 핀이 있으니 점은 빼고
   }
   function stopAdding() {
     state.adding = false; $("#addbar").hidden = true; $("#fab").hidden = false; MapKit.setAdding?.(false);
+    MapKit.showStores?.(null);
     state.ghost?.remove(); state.ghost = null;
+  }
+  // 찾은 위치가 화면에서 가리지 않게: 모바일은 위 버튼줄과 아래 입력창 사이 가운데로
+  function focusVisible(lat, lng) {
+    if (desk()) return MapKit.focus(lat, lng, 0, 0);
+    const sh = $("#sheet"), top = $("#filterbar").getBoundingClientRect().bottom, bottom = innerHeight - (sh.hidden ? 0 : sh.offsetHeight);
+    MapKit.focus(lat, lng, 0, Math.round((top + Math.max(top + 80, bottom)) / 2 - innerHeight / 2));
+  }
+  // 지도에서 식당 점을 눌렀을 때: 한 건물에 한 곳이면 바로, 여러 곳이면 고르는 목록
+  function onStoreGroup(g) {
+    const ss = Stores.group(g).filter((r) => !findExisting(r));
+    if (!ss.length) return;
+    if (ss.length === 1) return pickStore(ss[0]);
+    const s = showSheet(`
+      ${head("이 건물 가게", `<b>${ss.length}곳</b><span>${esc(ss[0].address || "")}</span>`)}
+      <div class="results">${ss.map((r, i) => resultHTML(r, i, "sg")).join("")}</div>
+      <p class="hint">찾는 가게가 없으면 지도를 눌러 위치를 직접 찍어주세요.</p>${srcNote()}
+    `, "pin");
+    $("#scrim").hidden = true;
+    $$("[data-sg]", s).forEach((b) => (b.onclick = () => pickStore(ss[+b.dataset.sg])));
+  }
+  // 공공데이터 가게 하나를 골랐을 때: 이름·종류·주소를 채운 새 장소 화면 (이미 있는 곳이면 그 가게로)
+  function pickStore(r) {
+    const ex = findExisting(r);
+    if (ex) { stopAdding(); return openPlace(ex.id); }
+    const guess = catFrom(r.categoryRaw, r.name), cat = guess === "기타" ? "" : guess;
+    state.form = { pinDraft: true, name: r.name, category: cat, note: subFor(cat, r), address: r.address || "", addrAuto: false,
+      found: [r.address, r.floor && floorLabel(r.floor)].filter(Boolean).join(" · ") || r.name, store: r.name };
+    placeGhost(r.lat, r.lng);
+    focusVisible(r.lat, r.lng);
   }
   // ───────── 장소 추가: 주소로 찾기 → 지도에 핀 → 위치 확인 후 저장 ─────────
   function openAddrForm(nameHint = "") {
@@ -1148,7 +1213,9 @@
       if (busy) return;
       if (!addr.trim()) { msg = ""; $("#aerr").textContent = "주소를 적어주세요."; return; }
       busy = true; msg = ""; render();
-      const r = await MapKit.geocode?.(addr.trim());
+      // 사옥 주변 식당이 있는 건물 주소면 그 건물 위치로 바로 (도로명·지번 둘 다) → 아니면 OpenStreetMap에서 찾기
+      await window.Stores?.load();
+      const r = window.Stores?.atAddress(addr.trim()) || (await MapKit.geocode?.(addr.trim()));
       busy = false;
       hint = r?.roadOnly ? r : null;
       if (!r || r.roadOnly) { msg = r?.roadOnly ? `지도 데이터에 이 건물 번호가 없어서 정확한 위치를 못 찾았어요. 아래 버튼을 누르면 ${esc(r.label)} 근처로 지도를 옮겨드릴게요. 가게 위치를 직접 눌러주세요.` : "이 주소를 지도에서 찾지 못했어요. 지번(○○동 123-4) 말고 도로명 주소(예: 동교로 194)로 넣거나, 지도에서 직접 찍어주세요."; return render(); }
@@ -1157,9 +1224,7 @@
       startPinMode();
       placeGhost(r.lat, r.lng);
       // 모바일: 찾은 위치가 아래 입력창에 가리지 않게, 위 버튼줄과 입력창 사이 가운데로
-      if (desk()) MapKit.focus(r.lat, r.lng, 0, 0);
-      else { const sh = $("#sheet"), top = $("#filterbar").getBoundingClientRect().bottom, bottom = innerHeight - sh.offsetHeight;
-        MapKit.focus(r.lat, r.lng, 0, Math.round((top + Math.max(top + 80, bottom)) / 2 - innerHeight / 2)); }
+      focusVisible(r.lat, r.lng);
     };
     render();
   }
@@ -1173,7 +1238,7 @@
   function openPinForm(lat, lng) {
     // 이름·종류·주소를 적다가 지도를 다시 눌러 위치를 옮겨도 적은 내용은 그대로
     const prev = state.form?.pinDraft ? state.form : {};
-    state.form = { pinDraft: true, name: prev.name || "", category: prev.category || "", note: prev.note || "", address: prev.address || "", addrAuto: !!prev.addrAuto, approx: !!prev.approx && prev.lat == null, found: prev.lat == null ? prev.found || "" : "", lat, lng };
+    state.form = { pinDraft: true, name: prev.name || "", category: prev.category || "", note: prev.note || "", address: prev.address || "", addrAuto: !!prev.addrAuto, approx: !!prev.approx && prev.lat == null, found: prev.lat == null ? prev.found || "" : "", store: prev.lat == null ? prev.store || "" : "", lat, lng };
     // 지도에서 찍은 곳: 주소칸이 비었거나 자동으로 채운 값이면, 찍은 위치의 도로명 주소로 채움 (직접 적은 주소는 그대로)
     if ((!state.form.address || state.form.addrAuto) && MapKit.reverse) {
       const f0 = state.form;
@@ -1185,10 +1250,13 @@
     }
     const render = () => {
       const f = state.form;
+      // 찍은 자리(같은 건물) 가게 이름 — 누르면 이름·종류·주소가 채워지고 위치도 그 건물로 맞춰짐
+      const nearby = (window.Stores?.ready() ? Stores.near(lat, lng, f.store ? 3 : 25, 6) : []).filter((r) => r.name !== f.store);
       const s = showSheet(`
         ${head("새 장소", `<b>사옥에서 도보 ${walkMin(lat, lng)}분</b><span>위치가 다르면 지도를 다시 눌러주세요</span>`)}
         ${f.approx ? `<p class="addr-warn">📍 지도 데이터에 이 건물 번호가 없어서 <b>같은 길 가까운 곳(${esc(f.found || "")})</b>에 찍었어요. 네이버·카카오 지도와 비교해서 지도를 눌러 가게 위치로 옮겨주세요.</p>` : f.found ? `<p class="addr-ok">📍 ${esc(f.found)} 위치로 찍었어요</p>` : ""}
-        <div class="field"><label class="flabel" for="pname">가게 이름</label><input class="input" id="pname" maxlength="30" placeholder="간판에 적힌 이름 그대로" value="${esc(f.name)}" autocomplete="off" /><p class="err" id="perr"></p></div>
+        <div class="field"><label class="flabel" for="pname">가게 이름</label><input class="input" id="pname" maxlength="30" placeholder="간판에 적힌 이름 그대로" value="${esc(f.name)}" autocomplete="off" /><p class="err" id="perr"></p>
+          ${nearby.length ? `<div class="near-st"><span class="sub-l">${f.store ? "같은 건물 다른 가게" : "이 자리 가게"} <span class="opt">누르면 이름·종류가 채워져요</span></span><div class="chips">${nearby.map((r, i) => `<button class="chip" data-near="${i}">${esc(r.name)}</button>`).join("")}</div></div>` : ""}</div>
         <div class="field"><span class="flabel">종류</span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
         <div class="field"><label class="flabel" for="paddr">주소 <span class="opt">찍은 위치로 자동 입력 · 고쳐도 돼요</span></label><input class="input" id="paddr" maxlength="60" placeholder="예: 동교로 194" value="${esc(f.address)}" autocomplete="off" /></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="psave">저장하고 기록 남기기</button></div>
@@ -1196,13 +1264,14 @@
       $("#scrim").hidden = true;
       const i = $("#pname", s); i.oninput = () => { f.name = i.value; $("#perr", s).textContent = ""; };
       const ad = $("#paddr", s); ad.oninput = () => { f.address = ad.value; f.addrAuto = false; };
+      $$("[data-near]", s).forEach((b) => (b.onclick = () => pickStore(nearby[+b.dataset.near])));
       bindCatPick(s, f, render);
       $("#psave", s).onclick = async () => {
         const name = f.name.trim();
         if (!name) { $("#perr", s).textContent = "가게 이름을 적어주세요."; return; }
         if (!f.category) { $("#cerr", s).textContent = "종류를 하나 골라주세요."; return; }
-        const dup = state.places.find((p) => p.name.replace(/\s/g, "") === name.replace(/\s/g, ""));
-        if (dup) { stopAdding(); return openPlace(dup.id); }
+        const dup = findExisting({ name, lat, lng });
+        if (dup) { stopAdding(); toast("이미 등록된 곳이에요"); return openPlace(dup.id); }
         $("#psave", s).disabled = true;
         stopAdding();
         await createPlace({ name, category: f.category, note: f.note.slice(0, 12), lat, lng, address: f.address.trim().slice(0, 60), kakaoId: "", placeUrl: "" });

@@ -1007,3 +1007,10 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .intro-copy { font-size: 13px; }
 .intro-go.btn-primary { background: var(--brand); }
 .intro-go.btn-primary:active { background: #B8241C; }
+
+/* 장소 추가: 공공데이터 식당 목록 (10/21) */
+.src-note { margin: 10px 2px 0; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
+.near-st { margin-top: 12px; }
+.near-st .sub-l { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+.near-st .sub-l .opt { font-weight: 400; color: var(--ink-3); }
+.near-st .chips { flex-wrap: wrap; }

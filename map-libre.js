@@ -102,7 +102,18 @@
     // PC: 왼쪽 목록(400px)이 가리지 않도록 지도 중심을 오른쪽 영역 가운데로
     const pad = () => map.setPadding({ left: matchMedia("(min-width: 900px)").matches ? 412 : 0, top: 0, right: 0, bottom: 0 });
     pad(); map.jumpTo({ center: [center.lng, center.lat] }); addEventListener("resize", pad);
-    map.on("click", (e) => onTap(e.lngLat.lat, e.lngLat.lng));
+    map.on("click", (e) => {
+      // 장소 추가 중 식당 점(또는 이름)을 누르면 그 가게를 고른 것으로 — 빈 곳을 누르면 지금처럼 그 자리에 찍기
+      if (storePick && map.getLayer("stores-dot")) {
+        const p = e.point, r = 12;
+        const hits = map.queryRenderedFeatures([[p.x - r, p.y - r], [p.x + r, p.y + r]], { layers: ["stores-dot", "stores-label"] });
+        if (hits.length) {
+          const best = hits.map((f) => { const q = map.project(f.geometry.coordinates); return [Math.hypot(q.x - p.x, q.y - p.y), f]; }).sort((a, b) => a[0] - b[0])[0][1];
+          return storePick(best.properties.g);
+        }
+      }
+      onTap(e.lngLat.lat, e.lngLat.lng);
+    });
     const far = () => el.classList.toggle("far", map.getZoom() < 15.6);
     map.on("zoom", far); far();
   }
@@ -133,7 +144,7 @@
       // 지도 그림(면·선)은 숨기고 글자만 남김. 큰길은 흰 선을 반투명하게 → 사진 위에서도 길이 보이게
       satSaved = [];
       for (const l of map.getStyle().layers) {
-        if (l.id === "sat" || l.id.startsWith("route") || l.type === "symbol" || l.type === "background") continue;
+        if (l.id === "sat" || l.id.startsWith("route") || l.id.startsWith("stores") || l.type === "symbol" || l.type === "background") continue;
         const vis = map.getLayoutProperty(l.id, "visibility") || "visible";
         if (l.type === "line" && SAT_ROADS.test(l.id)) { satSaved.push({ id: l.id, op: map.getPaintProperty(l.id, "line-opacity") }); map.setPaintProperty(l.id, "line-opacity", 0.35); continue; }
         if (vis !== "none") { satSaved.push({ id: l.id, vis }); map.setLayoutProperty(l.id, "visibility", "none"); }
@@ -171,6 +182,28 @@
   const zoom = (dir) => map?.easeTo({ zoom: map.getZoom() + (dir > 0 ? 1 : -1), duration: 250 });
   const home = (offY = 0, instant) => map?.easeTo({ center: [office.lng, office.lat], zoom: 16.5, offset: [0, offY], duration: instant ? 0 : 600 });   // jumpTo는 offset을 무시해서 easeTo(0초)
   const setAdding = (on) => { if (map) map.getCanvas().style.cursor = on ? "crosshair" : ""; };
+
+  // ───────── 장소 추가 중에만: 주변 식당(공공데이터 상가정보)을 점 + 이름으로 ─────────
+  // 건물마다 점 하나, 가까이 보면 이름. 누르면 storePick(그룹 번호)
+  let storePick = null;
+  function showStores(fc, onPick) {
+    if (!map) return false;
+    const ids = ["stores-label", "stores-dot"];
+    if (!fc) { storePick = null; for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none"); return true; }
+    storePick = onPick;
+    if (map.getSource("stores")) map.getSource("stores").setData(fc);
+    else map.addSource("stores", { type: "geojson", data: fc });
+    if (!map.getLayer("stores-dot")) {
+      const font = map.getStyle().layers.find((l) => l.type === "symbol" && l.layout?.["text-font"])?.layout["text-font"] || ["Noto Sans Regular"];
+      map.addLayer({ id: "stores-dot", type: "circle", source: "stores", minzoom: 15,
+        paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 15, 2.5, 17, 4.5, 19, 6], "circle-color": "#DA2C23", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-opacity": 0.9 } });
+      map.addLayer({ id: "stores-label", type: "symbol", source: "stores", minzoom: 16.6,
+        layout: { "text-field": ["get", "label"], "text-font": font, "text-size": 11.5, "text-offset": [0, 0.75], "text-anchor": "top", "text-max-width": 8, "text-optional": true, "symbol-sort-key": ["-", 0, ["get", "n"]] },
+        paint: { "text-color": "#3A2A28", "text-halo-color": "#fff", "text-halo-width": 1.6 } });
+    }
+    for (const id of ids) map.setLayoutProperty(id, "visibility", "visible");
+    return true;
+  }
 
   // 도보 경로: 흰 테두리 + 파란 선, 사옥에서부터 그려짐
   // ───────── 도보 경로: 모션그래픽처럼 천천히 그려지는 그라데이션 선 ─────────
@@ -298,5 +331,7 @@
     } catch { return ""; }
   }
 
-  window.MapKit = { init, add, focus, zoom, home, setAdding, search, geocode, reverse, showRoute, clearRoute, fitRoute, setSatellite, setMode, satelliteReady, getMode: () => mode, attribution: "" };
+  const project = (lat, lng) => (map ? map.project([lng, lat]) : null);   // 위경도 → 화면 좌표 (확인용)
+  const setZoom = (z) => map?.jumpTo({ zoom: z });
+  window.MapKit = { init, add, focus, zoom, home, setAdding, showStores, project, setZoom, search, geocode, reverse, showRoute, clearRoute, fitRoute, setSatellite, setMode, satelliteReady, getMode: () => mode, attribution: "" };
 })();
