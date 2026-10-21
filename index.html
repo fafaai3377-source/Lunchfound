@@ -8,11 +8,11 @@
   <link rel="manifest" href="/api/manifest" />
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
   <link rel="alternate icon" href="/icons/favicon.ico" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/fe-home-180.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/api/hit?f=main-touch180" />
   <script>
     // 아이폰·아이패드: 탭 아이콘도 홈 화면과 같은 빨강 꽉 찬 // 로 (아이폰은 홈 화면에 추가할 때 탭 아이콘을 쓰기도 해서)
     if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
-      document.querySelectorAll('link[rel~="icon"]').forEach(function (l) { l.href = "/icons/fe-home-180.png"; l.type = "image/png"; l.setAttribute("sizes", "180x180"); });
+      document.querySelectorAll('link[rel~="icon"]').forEach(function (l) { l.href = "/api/hit?f=main-favicon"; l.type = "image/png"; l.setAttribute("sizes", "180x180"); });
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <!-- 상단 상태바 색: 스플래시 동안만 버건디, 그 뒤엔 화면 배경색과 같게 (app.js applyTheme) -->

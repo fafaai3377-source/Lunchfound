@@ -16,7 +16,7 @@ const base = {
   theme_color: "#F5F5F7",
 };
 const png = (src, n, purpose) => ({ src, sizes: `${n}x${n}`, type: "image/png", ...(purpose ? { purpose } : {}) });
-const APPLE = [png("/icons/fe-home-180.png", 180), png("/icons/fe-home-192.png", 192), png("/icons/fe-home-512.png", 512)];
+const APPLE = [png("/api/hit?f=m-touch180", 180), png("/api/hit?f=m-red192", 192), png("/api/hit?f=m-red512", 512)];
 const OTHERS = [
   png("/icons/icon-192.png", 192, "any"), png("/icons/icon-512.png", 512, "any"),
   png("/icons/fe-home-maskable-192.png", 192, "maskable"), png("/icons/fe-home-maskable-512.png", 512, "maskable"),
@@ -28,7 +28,17 @@ function isApple(ua) {
   return /Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox|OPR/.test(ua);   // 맥·아이패드 Safari
 }
 
-module.exports = (req, res) => {
+const { admin, firebaseApp } = require("./_firebase");
+async function log(req) {   // 진단용: 누가 앱 정보를 받아갔는지 (api/hit.js와 같은 _iconlog에)
+  try {
+    const h = req.headers;
+    await admin.firestore(firebaseApp()).collection("_iconlog").add({ t: Date.now(), f: "manifest" + (req.query.from ? "-" + String(req.query.from).slice(0, 10) : ""),
+      ua: String(h["user-agent"] || "").slice(0, 300), accept: String(h["accept"] || "").slice(0, 120), dest: String(h["sec-fetch-dest"] || ""), mode: String(h["sec-fetch-mode"] || ""), ref: String(h["referer"] || "").slice(0, 120) });
+  } catch (e) { console.error("iconlog", e && e.message); }
+}
+
+module.exports = async (req, res) => {
+  await log(req);
   const ua = String(req.headers["user-agent"] || "");
   const apple = isApple(ua);
   res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");

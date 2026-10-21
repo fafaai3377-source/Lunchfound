@@ -1,0 +1,44 @@
+{
+  "rewrites": [
+    {
+      "source": "/t",
+      "destination": "/api/hit?f=page-t"
+    },
+    {
+      "source": "/apple-touch-icon.png",
+      "destination": "/api/hit?f=root-touch"
+    },
+    {
+      "source": "/apple-touch-icon-precomposed.png",
+      "destination": "/api/hit?f=root-touch-pre"
+    },
+    {
+      "source": "/apple-touch-icon-180x180.png",
+      "destination": "/api/hit?f=root-touch180"
+    },
+    {
+      "source": "/apple-touch-icon-180x180-precomposed.png",
+      "destination": "/api/hit?f=root-touch180-pre"
+    },
+    {
+      "source": "/apple-touch-icon-120x120.png",
+      "destination": "/api/hit?f=root-touch120"
+    },
+    {
+      "source": "/apple-touch-icon-120x120-precomposed.png",
+      "destination": "/api/hit?f=root-touch120-pre"
+    },
+    {
+      "source": "/apple-touch-icon-152x152.png",
+      "destination": "/api/hit?f=root-touch152"
+    },
+    {
+      "source": "/apple-touch-icon-167x167.png",
+      "destination": "/api/hit?f=root-touch167"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/api/hit?f=root-ico"
+    }
+  ]
+}
