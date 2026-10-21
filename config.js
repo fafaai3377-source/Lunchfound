@@ -6,6 +6,8 @@ window.CONFIG = {
   appName: "foundeat",
   appTitle: "foundeat",
   tagline: "같이 먹고, 같이 찾는 우리 팀 맛집 지도",
+  // 브라우저 탭 · 앱 창 위쪽 제목 (앱 이름 foundeat으로 시작해야 설치한 앱 창에서 이름이 두 번 붙지 않아요)
+  pageTitle: "foundeat — 같이 먹고, 같이 찾는 맛집",
   // 로고 이미지 (보내주신 // foundeat 원본에서 그대로 뽑음). 밝은 화면엔 검정, 스플래시(빨강)엔 흰색
   logo: { black: "./brand/logo-black.png", white: "./brand/logo-white.png", mark: "./brand/mark-black.png" },
   // 브랜드 색: 스플래시 · 앱 아이콘 · 파비콘에 쓰는 빨강 (UI 버튼 강조색은 styles.css의 --accent)

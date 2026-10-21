@@ -2172,7 +2172,7 @@
     const br = $("#brand"); br.setAttribute("role", "button"); br.tabIndex = 0;
     br.onclick = () => { if (state.sheet === "place") closeSheet(); hideTip(); state.selected = null; MapKit.clearRoute?.(); state.routeFor = null; renderMarkers(); if (state.mapReady) homeView(); };
     br.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); br.onclick(); } };
-    document.title = C.appTitle || n;
+    document.title = C.pageTitle || C.appTitle || n;
     initPress();
     applyTheme(themePref());
     $("#themeBtnLogin").onclick = () => { const order = ["light", "dark", "system"]; applyTheme(order[(order.indexOf(themePref()) + 1) % 3]); };
