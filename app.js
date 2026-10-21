@@ -105,6 +105,8 @@
   // 재방문 기록: 이미 기록을 남긴 곳에 또 갔을 때 남기는 간단한 기록 (별점 없이 먹은 메뉴 · 추천 포인트 · 메모)
   // 데이터는 기록(reviews)과 같은 곳에 kind: "revisit", rating: 0으로 저장 → 방문 횟수·추천 메뉴·추천 포인트엔 들어가고 별점 평균엔 안 들어감
   const isRevisit = (r) => r.kind === "revisit";
+  // 다시 간 곳 표시: 컬러 이모지(🔁) 대신 글자색을 따라가는 얇은 선 아이콘 (10/21)
+  const IC_AGAIN = `<svg class="ic-again" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.75 7.25v-.5a2.5 2.5 0 0 1 2.5-2.5h7.5M10.5 2l2.25 2.25-2.25 2.25M13.25 8.75v.5a2.5 2.5 0 0 1-2.5 2.5h-7.5M5.5 14l-2.25-2.25L5.5 9.5"/></svg>`;
   // 메뉴 문자열 → 낱개 메뉴 ("제육, 된장" → ["제육", "된장"])
   const menuItems = (s) => String(s || "").split(/[,，·\/]/).map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean);
   // 한 멤버가 한 가게에 남긴 다녀온 기록(처음 + 재방문)을 "내 기록 하나"로 합침 (10/21)
@@ -178,7 +180,7 @@
     "@solo": { label: "🍙 혼밥", test: (st) => st.solo === "ok" },
     "@cheap": { label: "💸 거지맵", test: (st, p) => (p?.category || "") !== "카페" && st.minPrice > 0 && st.minPrice < (C.cheapPrice || 10000) },   // 카페는 밥이 아니라서 거지맵에서 제외
     // 또간집: 멤버들 방문(재방문 포함)이 합쳐서 3번 이상인 밥집 — 카페는 제외
-    "@again": { label: "🔁 또간집", test: (st, p) => (p?.category || "") !== "카페" && st.visits >= AGAIN },
+    "@again": { label: "또간집", icon: IC_AGAIN, test: (st, p) => (p?.category || "") !== "카페" && st.visits >= AGAIN },
   };
   const inCat = (x, cat) => (SPECIAL[cat] ? SPECIAL[cat].test(x.st, x.p) : (x.p.category || "기타") === cat);
   // 정렬: 인기(멤버가 다녀온 기록 수 + 가고 싶어요 수) → 별점 → 가까운 순으로 동점 처리
@@ -524,7 +526,7 @@
         <div class="tc-body">
           <div class="tc-name">${esc(p.name)}</div>
           <div class="tc-line">${esc(p.category || "기타")} · <b>도보 ${wi.min}분</b>${dist}</div>
-          <div class="tc-line">${st.count ? `<i class="star">★</i> <b>${st.avg.toFixed(1)}</b> (${st.count})` : "아직 기록 없음"}${st.visits >= 2 ? ` · 🔁 방문 ${st.visits}번` : ""}</div>
+          <div class="tc-line">${st.count ? `<i class="star">★</i> <b>${st.avg.toFixed(1)}</b> (${st.count})` : "아직 기록 없음"}${st.visits >= 2 ? ` · <span class="again">${IC_AGAIN}방문 ${st.visits}번</span>` : ""}</div>
           ${st.menus.length ? `<div class="tc-line tc-menu"><span class="k">추천 메뉴</span> ${st.menus.map((m) => `<b>${esc(m)}</b>`).join(" · ")}</div>` : ""}
           ${st.picks.length ? `<div class="tc-picks">${st.picks.slice(0, 3).map(([k]) => `<span>${PICKS[k]}</span>`).join("")}</div>` : ""}
         </div>
@@ -617,7 +619,7 @@
   function rowHTML({ p, st }, rank) {
     const meta = [];
     meta.push(st.count ? `<span class="rate"><i>★</i> ${st.avg.toFixed(1)} <span style="color:var(--ink-2);font-weight:400">(${st.count})</span></span>` : st.wish.length ? `<span>♡ 가고 싶은 멤버 ${st.wish.length}</span>` : `<span>아직 기록 없음</span>`);
-    if (st.visits >= 2) meta.push(`<span class="again">🔁 방문 ${st.visits}번</span>`);
+    if (st.visits >= 2) meta.push(`<span class="again">${IC_AGAIN}방문 ${st.visits}번</span>`);
     meta.push(`<span>${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}</span>`);
     if (st.wait) meta.push(`<span>웨이팅 ${WAIT_S[st.wait]}</span>`);
     if (st.count && st.wish.length) meta.push(`<span>♡ ${st.wish.length}</span>`);   // 기록 없는 곳은 앞에 "가고 싶은 멤버 N"이 이미 있음
@@ -672,7 +674,7 @@
           (im.places ? `<div class="impact"><span class="impact-n">${im.viewers}</span><span>${im.viewers ? `내 기록 ${im.places}곳 · 멤버 <b>${im.viewers}명</b>이 봤어요` : `내 기록 ${im.places}곳 · 아직 본 멤버 없음`}</span></div>` : "") +
           (mine.length ? mine.map((c) => { const p = placeById(c.base.placeId); if (!p) return "";
             return `<button class="row" data-place="${esc(p.id)}">${thumbHTML(p)}<div class="row-main"><div class="row-name">${esc(p.name)}</div>
-              <div class="row-meta">${c.rated ? `<span class="rate"><i>★</i> ${c.base.rating}</span>` : ""}${c.visits > 1 ? `<span class="again">🔁 ${c.visits}회 방문</span>` : ""}${c.menus.length ? `<span>${esc(c.menus.slice(-2).join(" · "))}</span>` : ""}<span>${ago(c.last)}</span></div></div><span class="row-side">${heartHTML(p.id)}</span></button>`; }).join("")
+              <div class="row-meta">${c.rated ? `<span class="rate"><i>★</i> ${c.base.rating}</span>` : ""}${c.visits > 1 ? `<span class="again">${IC_AGAIN}${c.visits}회 방문</span>` : ""}${c.menus.length ? `<span>${esc(c.menus.slice(-2).join(" · "))}</span>` : ""}<span>${ago(c.last)}</span></div></div><span class="row-side">${heartHTML(p.id)}</span></button>`; }).join("")
             : `<p class="empty">아직 남긴 기록이 없어요.</p>`);
       }
     }
@@ -717,7 +719,7 @@
       <div class="seg sortbar" role="group" aria-label="멤버 정렬"><button data-ms="visits" aria-pressed="${ms === "visits"}">기록 많은 순</button><button data-ms="recent" aria-pressed="${ms === "recent"}">최근 순</button></div>` +
       list.map(({ m, s }) => `<button class="row member-row" data-who="${esc(m.name)}">${avatar(m.name)}
         <div class="row-main"><div class="row-name">${esc(m.name)}${m.name === me ? ` <span class="me-tag">나</span>` : ""} <span class="team">${esc(m.team || "")}</span></div>
-          <div class="row-meta">${s.visits ? `<span><b>${s.places.length}</b>곳</span><span>방문 ${s.visits}번</span>${s.fav ? `<span class="again">🔁 ${esc(s.fav.name)} ${s.places[0].n}번</span>` : s.cat ? `<span>${esc(catLabel(s.cat))}</span>` : ""}` : `<span>아직 다녀온 기록 없음</span>`}${s.wish.length ? `<span>♡ ${s.wish.length}</span>` : ""}</div></div>
+          <div class="row-meta">${s.visits ? `<span><b>${s.places.length}</b>곳</span><span>방문 ${s.visits}번</span>${s.fav ? `<span class="again">${IC_AGAIN}${esc(s.fav.name)} ${s.places[0].n}번</span>` : s.cat ? `<span>${esc(catLabel(s.cat))}</span>` : ""}` : `<span>아직 다녀온 기록 없음</span>`}${s.wish.length ? `<span>♡ ${s.wish.length}</span>` : ""}</div></div>
         <span class="row-side"><span class="row-walk">${s.last ? ago(s.last) : ""}</span></span></button>`).join("");
   }
   function whoHTML(name) {
@@ -743,7 +745,7 @@
     const places = ws === "recent" ? [...s.places].sort((a, b) => b.last - a.last) : s.places;
     const rows = places.map((o, i) => { const p = placeById(o.id), st = stats(p);
       return `<button class="row" data-place="${esc(p.id)}">${ws === "most" ? `<span class="rank">${i + 1}</span>` : ""}${thumbHTML(p)}<div class="row-main"><div class="row-name">${esc(p.name)}</div>
-        <div class="row-meta">${o.n >= 2 ? `<span class="again">🔁 ${o.n}번</span>` : `<span>1번</span>`}${o.rating ? `<span class="rate"><i>★</i> ${(+o.rating).toFixed(1)}</span>` : ""}${o.menu ? `<span>${esc(o.menu)}</span>` : ""}<span>${ago(o.last)}</span></div></div>
+        <div class="row-meta">${o.n >= 2 ? `<span class="again">${IC_AGAIN}${o.n}번</span>` : `<span>1번</span>`}${o.rating ? `<span class="rate"><i>★</i> ${(+o.rating).toFixed(1)}</span>` : ""}${o.menu ? `<span>${esc(o.menu)}</span>` : ""}<span>${ago(o.last)}</span></div></div>
         <span class="row-side"><span class="row-walk">도보 ${st.walk}분</span>${heartHTML(p.id)}</span></button>`; }).join("");
     const sortRow = s.places.length ? `<div class="who-note-row"><p class="who-note">🗺 지도에도 ${nim} 다녀온 곳만 보여요</p>
       <span class="mini-sort" role="group" aria-label="다녀온 곳 정렬"><button data-ws="most" aria-pressed="${ws === "most"}">자주 간 순</button><button data-ws="recent" aria-pressed="${ws === "recent"}">최신순</button></span></div>` : "";
@@ -834,7 +836,7 @@
     const keys = [...Object.keys(SPECIAL), ...CATS.filter((c) => cnt(c))];
     const keep = bar.scrollLeft;
     bar.innerHTML = `<button class="chip glass" data-f="" aria-pressed="${!state.cats.length}">전체 <span class="n">${all.length}</span></button>` +
-      keys.map((c) => `<button class="chip glass${SPECIAL[c] ? " special" : ""}" data-f="${c}" aria-pressed="${state.cats.includes(c)}">${catName(c)} <span class="n">${cnt(c)}</span></button>`).join("");
+      keys.map((c) => `<button class="chip glass${SPECIAL[c] ? " special" : ""}" data-f="${c}" aria-pressed="${state.cats.includes(c)}">${SPECIAL[c]?.icon || ""}${catName(c)} <span class="n">${cnt(c)}</span></button>`).join("");
     bar.scrollLeft = keep;
     $$("[data-f]", bar).forEach((b) => (b.onclick = () => {
       const c = b.dataset.f;
@@ -908,7 +910,7 @@
     const cards = memberCards(st);
     const reviews = cards.map((c) => { const b = c.base, mine = c.uid === me, ids = c.vs.map((r) => r.id).join(",");
       return `<div class="review${c.visits > 1 ? " revisit" : ""}">${avatar(c.userName, true)}<div class="review-body">
-        <div class="review-top"><span class="who-line">${whoBtn(b)}<span class="visit-n${c.visits > 1 ? " again" : ""}">${c.visits > 1 ? "🔁 " : ""}${c.visits}회 방문</span></span><span class="when">${ago(c.last)}</span></div>
+        <div class="review-top"><span class="who-line">${whoBtn(b)}<span class="visit-n${c.visits > 1 ? " again" : ""}">${c.visits > 1 ? IC_AGAIN : ""}${c.visits}회 방문</span></span><span class="when">${ago(c.last)}</span></div>
         ${c.rated ? `<div class="stars-s">${starsTxt(b.rating)}</div>` : ""}
         ${!isRevisit(b) && (b.wait || b.solo || b.price) ? `<div class="tags">${b.wait ? `<span class="tag">${WAIT[b.wait]}</span>` : ""}${b.solo ? `<span class="tag">${SOLO[b.solo]}</span>` : ""}${b.price ? `<span class="tag">${won(b.price)}</span>` : ""}</div>` : ""}
         ${c.menus.length ? `<div class="review-menu">추천 메뉴 <b>${c.menus.map(esc).join(" · ")}</b></div>` : ""}
@@ -925,7 +927,7 @@
           return `<span class="hero-who">${r ? `📷 ${esc(r.userName || "멤버")}님 사진${r.menu ? ` · ${esc(r.menu)}` : ""}` : isAdmin() ? "아직 대표 사진이 없어요" : "기록에 사진을 남기면 여기 보여요"}</span>`; })()}
           <span class="hero-btns">${p.images?.length > 1 ? `<button data-act="nextimg">다른 사진</button>` : ""}${canDelCover ? `<button data-act="delcover">빼기</button>` : ""}${isAdmin() ? `<label class="hero-up"><input type="file" accept="image/*" hidden id="coverIn" />📷 ${img ? "사진 추가" : "대표 사진 올리기"}</label>` : ""}</span></div></div>`;
     const s = showSheet(`
-      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.address && /\d/.test(p.address) ? `<span class="addr-line">📍 ${esc(p.address)}</span>` : ""}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${st.visits >= 2 ? `<span class="again">🔁 멤버들이 ${st.visits}번 다녀왔어요${st.visits >= AGAIN && p.category !== "카페" ? " · 또간집" : ""}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
+      ${head(`${esc(p.name)}${heartHTML(p.id, "big")}`, `<span class="cat-line">${emojiFor(p)} ${esc(p.category || "기타")}${p.note ? ` · ${esc(p.note)}` : ""}<button class="link cat-edit" data-act="editcat">종류 수정</button></span>${(() => { const wi = walkInfo(p.lat, p.lng); return wi.m ? `<b>사옥에서 걸어서 ${wi.min}분 · ${wi.m >= 1000 ? (wi.m / 1000).toFixed(1) + "km" : wi.m + "m"}</b>` : `<b>사옥에서 도보 약 ${wi.min}분</b>`; })()}${p.address && /\d/.test(p.address) ? `<span class="addr-line">📍 ${esc(p.address)}</span>` : ""}${p.createdByName ? `<span>${p.createdByName === "기본 등록" ? "기본 등록" : `${esc(p.createdByName)}님이 등록`}</span>` : ""}${st.visits >= 2 ? `<span class="again">${IC_AGAIN}멤버들이 ${st.visits}번 다녀왔어요${st.visits >= AGAIN && p.category !== "카페" ? " · 또간집" : ""}</span>` : ""}${viewersOf(p).length ? `<span>👀 멤버 ${viewersOf(p).length}명이 봤어요</span>` : ""}`)}
       ${hero}
       <div class="stats">
         <div class="stat"><div class="k">별점</div><div class="v">${st.count ? `★ ${st.avg.toFixed(1)}` : "–"}</div></div>
@@ -934,7 +936,7 @@
         <div class="stat"><div class="k">평균</div><div class="v">${st.price ? `${(st.price / 1000).toFixed(st.price % 1000 ? 1 : 0)}천원` : "–"}</div></div>
       </div>
       <div class="stack">
-        <button class="btn btn-primary btn-block" data-act="review">${myFirst ? "🔁 또 왔어요 · 내 기록 업데이트" : "기록 남기기"}</button>
+        <button class="btn btn-primary btn-block" data-act="review">${myFirst ? "또 왔어요 · 내 기록 업데이트" : "기록 남기기"}</button>
         ${mineAny ? "" : `<button class="btn btn-secondary btn-block" data-act="wish">♡ 찜하고 메모 남기기</button>`}
         <button class="btn btn-plain btn-block" data-act="meet">🍽 여기로 오늘 약속 만들기</button>
         <div class="btns"><a class="btn btn-plain" href="${l.naver}" data-dir="naver" target="_blank" rel="noopener">네이버 길찾기</a><a class="btn btn-plain" href="${l.kakao}" data-dir="kakao" target="_blank" rel="noopener">카카오 길찾기</a></div>
@@ -1296,7 +1298,7 @@
     const n = st.visited.filter((r) => r.uid === me && r.createdAt <= at).length + (f.editId ? 0 : 1);   // 이번이 몇 번째 방문인지
     const known = topMenus(st.visited, 6);   // 이 가게에서 멤버들이 적은 메뉴 — 누르면 바로 입력
     const s = showSheet(`
-      ${head(esc(p.name), `<span class="again">🔁 ${n}회째 방문</span><span>${f.editId ? "이 방문 기록 수정" : "내 기록에 방문 추가"}</span>`)}
+      ${head(esc(p.name), `<span class="again">${IC_AGAIN}${n}회째 방문</span><span>${f.editId ? "이 방문 기록 수정" : "내 기록에 방문 추가"}</span>`)}
       <p class="revisit-note">새 기록이 따로 생기지 않고 <b>내 기록에 더해져요</b>. 방문 횟수가 ${n}회로 올라가고, 적은 메뉴는 내 추천 메뉴에 추가돼요. 아무것도 안 적고 <b>간 기록만 남기기</b>를 눌러도 돼요.</p>
       <div class="field"><label class="flabel" for="rmenu">오늘 먹은 메뉴 <span class="opt">선택 · 내 추천 메뉴에 추가돼요</span></label><input class="input" id="rmenu" maxlength="40" placeholder="${esc(known[0] || "제육 정식")}" value="${esc(f.menu)}" />
         ${known.length ? `<div class="chips sub quick-menus" aria-label="이 가게에서 멤버들이 먹은 메뉴">${known.map((m) => `<button class="chip" data-qm="${esc(m)}" aria-pressed="${!!f.menu && menuKey(f.menu) === menuKey(m)}">${esc(m)}</button>`).join("")}</div>` : ""}</div>
@@ -1383,7 +1385,7 @@
           btn.textContent = `사진 올리는 중 ${i + 1}/${photos.length}`;
           await state.store.addPhoto({ placeId: state.selected, reviewId: rid, uid: state.user.uid, userName: state.user.name, menu, data: photos[i].full });
         }
-        toast(photos.length ? `🔁 내 기록을 ${n}회 방문으로 업데이트했어요 · 사진 ${photos.length}장` : `🔁 내 기록을 ${n}회 방문으로 업데이트했어요`);
+        toast(photos.length ? `내 기록을 ${n}회 방문으로 업데이트했어요 · 사진 ${photos.length}장` : `내 기록을 ${n}회 방문으로 업데이트했어요`);
         const id = state.selected; state.form = null; openPlace(id); return;
       }
       if (f.editId) {
@@ -1960,7 +1962,7 @@
     { hero: true, icon: `<img src="./icons/icon-192.png" alt="" />`, title: `${C.appTitle || "Lunchfound"}에 오신 걸 환영해요`,
       html: "사옥 근처에서 멤버들이 <b>직접 다녀온 밥집</b>을 모아 둔 지도예요.<br>버튼을 하나씩 짚어 드릴게요 · 30초면 끝나요" },
     { el: guidePin, pad: 8, tapX: 0.5, title: "가게 핀", html: "핀을 누르면 사진 · 별점 · <b>추천 메뉴</b>와 사옥에서 걸어가는 길이 나와요. 숫자는 멤버들의 평균 별점이에요." },
-    { el: () => (desk() ? $("#filterwrap") : $("#filterbar")), pad: 4, tapX: 0.14, title: "먹고 싶은 것만 보기", html: "🍙 혼밥 · 💸 거지맵 · 🔁 또간집 · 음식 종류를 고르면 <b>지도와 목록이 같이</b> 바뀌어요. 여러 개 골라도 돼요." },
+    { el: () => (desk() ? $("#filterwrap") : $("#filterbar")), pad: 4, tapX: 0.14, title: "먹고 싶은 것만 보기", html: "🍙 혼밥 · 💸 거지맵 · 또간집 · 음식 종류를 고르면 <b>지도와 목록이 같이</b> 바뀌어요. 여러 개 골라도 돼요." },
     { el: "#tabs", pad: 4, tapX: 0.5, title: "전체 · 멤버 · 내 기록", html: "<b>멤버</b>를 누르면 그 사람이 다녀온 곳만 지도에 남아요. <b>내 기록</b>에선 내가 남긴 곳과 찜한 곳을 모아 봐요." },
     { el: "#fab", pad: 5, tapX: 0.5, title: "장소 추가", html: "목록에 없는 가게는 여기서 등록해요. 가게 이름 검색 · 주소 붙여넣기 · 지도에서 찍기 중 편한 걸로." },
     { el: "#rouletteBtn", pad: 5, tapX: 0.5, title: "오늘 뭐 먹지?", html: "고민될 땐 룰렛! <b>먹기 싫은 것</b>만 빼고 돌리면 오늘 갈 곳을 골라줘요." },
@@ -1968,7 +1970,7 @@
     { el: "#zmode", pad: 5, tapX: 0.5, title: "지도 종류", html: "<b>그래픽</b> 지도와 <b>위성</b> 지도를 바꿔 볼 수 있어요." },
     { el: "#meBtn", pad: 5, tapX: 0.5, title: "내 정보", html: "약속 알림 켜기 · 다크 모드 · 앱으로 설치, 그리고 <b>이 안내 다시 보기</b>도 여기 있어요." },
     { hero: true, title: "기록은 이렇게 남겨요", next: "시작하기",
-      html: `<ol class="gd-list"><li><span><b>가게 열기</b> — 핀이나 아래 목록에서</span></li><li><span><b>기록 남기기</b> — 별점만 골라도 저장돼요</span></li><li><span><b>또 갔다면</b> — 🔁 재방문 기록, 간 것만 남겨도 OK</span></li></ol>` },
+      html: `<ol class="gd-list"><li><span><b>가게 열기</b> — 핀이나 아래 목록에서</span></li><li><span><b>기록 남기기</b> — 별점만 골라도 저장돼요</span></li><li><span><b>또 갔다면</b> — 재방문 기록, 간 것만 남겨도 OK</span></li></ol>` },
   ];
   function startGuide() {
     if (!window.LFGuide || LFGuide.isOpen()) return;

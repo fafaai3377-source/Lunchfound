@@ -799,7 +799,7 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .map-off .mapctl { display: none; }
 
 /* ═════════ 재방문 · 또간집 · 멤버 보기 ═════════ */
-/* 방문 횟수 표시 (🔁): 강조색 대신 잉크 굵게 — 파랑은 누르는 것에만 */
+/* 방문 횟수 표시: 강조색 대신 잉크 굵게 — 파랑은 누르는 것에만 */
 .row-meta .again, .sub .again, .tc-line .again { color: var(--ink); font-weight: 600; }
 .tag.again { background: var(--fill); color: var(--ink); font-weight: 600; }
 .h3-n { margin-left: 8px; font-size: 13px; font-weight: 500; color: var(--ink-3); letter-spacing: 0; }
@@ -990,3 +990,8 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .visit-list .vt { flex: none; font-weight: 600; color: var(--ink); white-space: nowrap; }
 .visit-list .vm { flex: 1; min-width: 0; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .visit-list .link { flex: none; font-size: 13px; }
+
+/* 다시 간 곳 아이콘: 컬러 이모지 대신 얇은 선 (글자색을 따라감, 10/21) */
+.ic-again { display: inline-block; flex: none; width: 1em; height: 1em; margin-right: .24em; vertical-align: -0.15em; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.chip .ic-again { width: .95em; height: .95em; margin-right: .3em; vertical-align: -0.12em; }
+.visit-n .ic-again { width: .95em; height: .95em; margin-right: .2em; }
