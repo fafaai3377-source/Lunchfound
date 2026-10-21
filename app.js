@@ -1923,23 +1923,28 @@
   const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   // 카카오톡·네이버·인스타그램 등 앱 안에서 열린 브라우저: 홈 화면에 추가해도 foundeat 아이콘이 안 붙거나 아예 추가가 안 됨
   const isKakao = () => /KAKAOTALK/i.test(navigator.userAgent);
-  const inApp = () => isKakao() || /NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(navigator.userAgent);
+  // 아이폰의 크롬·웨일·파이어폭스 등: 홈 화면에 추가는 되지만 사이트 아이콘을 못 가져와서 글자(F) 아이콘이 됨 → Safari로
+  const iosNotSafari = () => isIOS() && /CriOS|FxiOS|EdgiOS|Whale|OPiOS|DuckDuckGo|GSA\//.test(navigator.userAgent);
+  const inApp = () => isKakao() || iosNotSafari() || /NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(navigator.userAgent);
   // Safari(아이폰) · 크롬(안드로이드)으로 이 사이트 열기
   function openOutside() {
     const url = location.origin + "/";
     if (isKakao()) { location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(url); return; }
     if (!isIOS()) { location.href = `intent://${location.host}/#Intent;scheme=https;package=com.android.chrome;end`; return; }
+    // 아이폰: Safari로 바로 여는 주소(iOS 17 이상). 안 열리면 주소를 복사해 드림
     const done = () => toast("주소를 복사했어요. Safari 주소창에 붙여넣어 주세요");
-    try { navigator.clipboard.writeText(url).then(done, () => toast(url)); } catch { toast(url); }
+    try { navigator.clipboard.writeText(url).then(() => {}, () => {}); } catch {}
+    location.href = `x-safari-https://${location.host}/`;
+    setTimeout(() => { if (document.visibilityState === "visible") done(); }, 1200);
   }
   const oldIconNote = `<p class="hint" style="margin-top:10px">홈 화면에 예전에 추가한 아이콘(Lunchfound 포함)이 있으면 먼저 길게 눌러 지운 다음 다시 추가해 주세요. 휴대폰이 예전 아이콘을 기억하고 있을 수 있어요.</p>`;
   function openInstall() {
     const browser = isIOS() ? "Safari로" : "크롬으로", kakaoAnd = isKakao() && !isIOS();
     const how = standalone() ? `<p class="empty">이미 앱으로 쓰고 있어요 👍</p>`
-      : inApp() ? `<p class="hint" style="margin-top:12px">지금은 ${isKakao() ? "카카오톡" : "다른 앱"} 안에서 열린 화면이라 홈 화면에 추가해도 foundeat 아이콘이 제대로 안 붙어요. <b>${kakaoAnd ? "크롬이나 삼성 인터넷으로" : browser}</b> 연 다음 추가해 주세요.</p>
+      : inApp() ? `<p class="hint" style="margin-top:12px">지금은 ${isKakao() ? "카카오톡 안에서 열린 화면이라" : iosNotSafari() ? "Safari가 아닌 브라우저라" : "다른 앱 안에서 열린 화면이라"} 홈 화면에 추가해도 foundeat 아이콘이 제대로 안 붙어요. <b>${kakaoAnd ? "크롬이나 삼성 인터넷으로" : browser}</b> 연 다음 추가해 주세요.</p>
           <div class="stack" style="margin-top:12px"><button class="btn btn-primary btn-block" id="openOut">${kakaoAnd ? "브라우저로 열기" : `${browser} 열기`}</button></div>`
       : installEvt ? `<div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="doInstall">앱 설치하기</button></div>${oldIconNote}`
-      : isIOS() ? `<ol class="steps"><li><b>Safari</b>로 이 주소를 열어요</li><li>아래쪽 <b>공유 버튼(□↑)</b>을 눌러요</li><li><b>홈 화면에 추가</b> → <b>추가</b></li><li>홈 화면의 foundeat 아이콘으로 열면 앱처럼 전체 화면으로 열려요. 아이폰은 이렇게 추가해야 알림도 받을 수 있어요(iOS 16.4 이상)</li></ol>${oldIconNote}`
+      : isIOS() ? `<ol class="steps"><li><b>Safari</b>로 이 주소를 열어요</li><li>아래쪽 <b>공유 버튼(□↑)</b>을 눌러요. 안 보이면 <b>⋯</b>을 누른 다음 <b>공유</b></li><li><b>홈 화면에 추가</b> → <b>추가</b></li><li>홈 화면의 foundeat 아이콘으로 열면 앱처럼 전체 화면으로 열려요. 아이폰은 이렇게 추가해야 알림도 받을 수 있어요(iOS 16.4 이상)</li></ol>${oldIconNote}`
       : `<ol class="steps"><li><b>크롬</b>으로 이 주소를 열어요</li><li>오른쪽 위 <b>⋮ 메뉴</b> → <b>앱 설치</b> 또는 <b>홈 화면에 추가</b></li><li>PC 크롬은 주소창 오른쪽의 <b>설치 아이콘</b>을 눌러도 돼요</li></ol>${oldIconNote}`;
     const s = showSheet(`${head("앱으로 설치", "<span>홈 화면에 추가하면 앱처럼 전체 화면으로 열려요</span>")}${how}`, "install");
     const b = $("#doInstall", s);

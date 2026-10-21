@@ -1,6 +1,6 @@
 // foundeat 서비스워커 — 앱으로 설치(PWA), 오프라인 대비, 알림 클릭 처리
 // 앱 파일을 고치면 아래 VERSION 숫자만 올려주세요. 다음 접속 때 새 버전으로 바뀌어요.
-const VERSION = "foundeat-v52";
+const VERSION = "foundeat-v53";
 const SHELL = ["./", "./index.html", "./styles.css", "./config.js", "./members.js", "./seeds.js", "./store.js", "./walk.js", "./map-kakao.js", "./map-libre.js", "./stores.js", "./guide.js", "./app.js", "./walk-graph.json", "./brand/logo-black.png", "./brand/logo-white.png", "./brand/mark-black.png"];
 
 self.addEventListener("install", (e) => {
