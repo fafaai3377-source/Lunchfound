@@ -1001,3 +1001,9 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .guest-note { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--parchment); font-size: 14px; line-height: 1.5; color: var(--ink-2); text-align: center; word-break: keep-all; }
 .avatar.anon { background: var(--fill-2); color: var(--ink-3); display: inline-grid; place-items: center; }
 .avatar.anon svg { width: 70%; height: 70%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+
+/* 첫 화면: 로고·문구를 75% 크기로, 시작하기는 브랜드 빨강 (10/21) */
+.intro-brand .logo { width: min(75%, 210px); }
+.intro-copy { font-size: 13px; }
+.intro-go.btn-primary { background: var(--brand); }
+.intro-go.btn-primary:active { background: #B8241C; }
