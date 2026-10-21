@@ -724,14 +724,17 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
   button, .chip, .row, a { touch-action: manipulation; }
 }
 
-/* 찜 하트 */
-.fav { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; flex: none; -webkit-tap-highlight-color: transparent; }
-.fav svg { width: 20px; height: 20px; fill: none; stroke: var(--ink-3); stroke-width: 1.8; transition: fill .18s ease, stroke .18s ease, transform .18s ease; }
+/* 찜 하트 — 확대(scale>1) 없이 작아졌다 제자리로 + 퍼지는 동그라미 (휴대폰에서 하트가 뭉개져 보이지 않게, 10/21) */
+.fav { position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; flex: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
+.fav svg { width: 20px; height: 20px; overflow: visible; shape-rendering: geometricPrecision; fill: none; stroke: var(--ink-3); stroke-width: 1.8; stroke-linejoin: round; transition: fill .18s ease, stroke .18s ease, transform .16s var(--ease-out); }
 .fav[aria-pressed="true"] svg { fill: #FF3B5C; stroke: #FF3B5C; }
-.fav:active svg { transform: scale(.85); }
-.fav.bump svg { animation: favBump 360ms var(--ease-spring, ease-out); }
-@keyframes favBump { 40% { transform: scale(1.3); } }
-@media (hover: hover) { .fav:hover svg { stroke: #FF3B5C; } }
+.fav:active svg { transform: scale(.82); }
+.fav.bump svg { animation: favBump 380ms var(--ease-out); }
+@keyframes favBump { 0% { transform: scale(.62); } 100% { transform: scale(1); } }
+.fav::after { content: ""; position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-radius: 50%; border: 2px solid #FF3B5C; opacity: 0; pointer-events: none; transform: translate(-50%, -50%); }
+.fav.bump[aria-pressed="true"]::after { animation: favRing 460ms var(--ease-out); }
+@keyframes favRing { 0% { width: 10px; height: 10px; opacity: .85; } 100% { width: 40px; height: 40px; opacity: 0; } }
+@media (hover: hover) and (pointer: fine) { .fav:hover svg { stroke: #FF3B5C; } }
 .fav.big { width: 36px; height: 36px; margin-left: 6px; vertical-align: middle; }
 .fav.big svg { width: 24px; height: 24px; }
 .sheet-head h2 { display: flex; align-items: center; min-width: 0; }
@@ -971,3 +974,19 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .guide.hero .gd-pop { padding: 22px 20px 6px; }
 .guide.hero .gd-body h3 { font-size: 22px; }
 @media (prefers-reduced-motion: reduce) { .gd-tap i, .gd-tap i::after, .gd-hole::after { animation: none; } }
+
+/* ═════════ 멤버 기록: 멤버당 한 장 (재방문은 방문 횟수·추천 메뉴로 합침, 10/21) ═════════ */
+.review-top .who-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.visit-n { flex: none; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: var(--r-pill); background: var(--fill); color: var(--ink-2); white-space: nowrap; }
+.visit-n.again { color: var(--ink); }
+.visits { margin-top: 8px; font-size: 13px; }
+.visits summary { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: var(--ink-2); font-weight: 600; cursor: pointer; list-style: none; -webkit-tap-highlight-color: transparent; }
+.visits summary::-webkit-details-marker { display: none; }
+.visits summary::after { content: "›"; display: inline-block; transform: rotate(90deg); transition: transform 180ms var(--ease-out); color: var(--ink-3); }
+.visits[open] summary::after { transform: rotate(-90deg); }
+.visit-list { margin: 2px 0 0; padding: 0; list-style: none; border-left: 2px solid var(--fill-2); }
+.visit-list li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0 5px 10px; line-height: 1.4; }
+.visit-list .vd { flex: none; width: 38px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.visit-list .vt { flex: none; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.visit-list .vm { flex: 1; min-width: 0; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visit-list .link { flex: none; font-size: 13px; }

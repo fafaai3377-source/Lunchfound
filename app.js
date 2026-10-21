@@ -105,6 +105,30 @@
   // 재방문 기록: 이미 기록을 남긴 곳에 또 갔을 때 남기는 간단한 기록 (별점 없이 먹은 메뉴 · 추천 포인트 · 메모)
   // 데이터는 기록(reviews)과 같은 곳에 kind: "revisit", rating: 0으로 저장 → 방문 횟수·추천 메뉴·추천 포인트엔 들어가고 별점 평균엔 안 들어감
   const isRevisit = (r) => r.kind === "revisit";
+  // 메뉴 문자열 → 낱개 메뉴 ("제육, 된장" → ["제육", "된장"])
+  const menuItems = (s) => String(s || "").split(/[,，·\/]/).map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean);
+  // 한 멤버가 한 가게에 남긴 다녀온 기록(처음 + 재방문)을 "내 기록 하나"로 합침 (10/21)
+  //  · 별점·웨이팅·혼밥·가격: 처음 기록 기준  · 방문 횟수: 처음 + 재방문
+  //  · 추천 메뉴: 방문할 때마다 적은 메뉴를 겹치지 않게 뒤에 추가  · 추천 포인트: 합침  · 메모·사진: 가장 최근 것
+  // 데이터는 지금처럼 방문마다 따로 저장 (또간집·자주 간 곳·방문 날짜가 그대로 계산되게) — 화면에서만 하나로 보여줌
+  function mergeVisits(list) {
+    const vs = [...list].sort((a, b) => a.createdAt - b.createdAt);
+    const base = vs.find((r) => !isRevisit(r)) || vs[0], latest = vs[vs.length - 1];
+    const menus = [], seen = new Set();
+    for (const r of vs) for (const m of menuItems(r.menu)) { const k = menuKey(m); if (!seen.has(k)) { seen.add(k); menus.push(m); } }
+    const picks = [...new Set(vs.flatMap((r) => r.picks || []))].filter((k) => PICKS[k]);
+    const withPh = [...vs].reverse().find((r) => r.thumb);
+    return { vs, base, latest, uid: base.uid, userName: base.userName, visits: vs.length, last: latest.createdAt, menus, picks,
+      memo: [...vs].reverse().find((r) => r.memo)?.memo || "", thumb: withPh?.thumb || "", photoCount: vs.reduce((n, r) => n + (r.photoCount || 0), 0),
+      rated: !isRevisit(base) && base.rating > 0 };
+  }
+  // 가게 하나의 멤버별 합친 기록 (최근에 다녀온 멤버부터)
+  function memberCards(st) {
+    const by = new Map();
+    for (const r of st.visited) { const k = r.uid || r.userName; if (!by.has(k)) by.set(k, []); by.get(k).push(r); }
+    return [...by.values()].map(mergeVisits).sort((a, b) => b.last - a.last);
+  }
+  const md = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()}`; };
   const AGAIN = 3;   // 또간집: 멤버들이 합쳐서 3번 이상 다녀온 곳
   // 추천 메뉴: 멤버들이 다녀와서 적은 메뉴를 많이 적은 순으로 (별점이 높은 기록의 메뉴에 살짝 가산). "제육, 된장"처럼 여러 개면 나눠서 셈
   const menuKey = (s) => s.replace(/\s+/g, "").toLowerCase();
@@ -564,7 +588,9 @@
   const myWishes = (pid) => state.reviews.filter((r) => r.placeId === pid && r.uid === state.user.uid && r.status === "wish");
   const isFav = (pid) => myWishes(pid).length > 0;
   const HEART = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.4 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.6 0 5.6 3.5 4.3 6.8-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg>`;
-  const heartHTML = (pid, cls = "") => `<span class="fav ${cls}" role="button" tabindex="0" data-fav="${esc(pid)}" aria-pressed="${isFav(pid)}" aria-label="${isFav(pid) ? "찜 빼기" : "찜하기"}">${HEART}</span>`;
+  // 방금 누른 하트: 저장되면서 목록·상세가 다시 그려져도 톡 튀는 모션이 끊기지 않게 잠깐 기억
+  let favBumped = { id: "", t: 0 };
+  const heartHTML = (pid, cls = "") => `<span class="fav ${cls}${favBumped.id === pid && Date.now() - favBumped.t < 450 ? " bump" : ""}" role="button" tabindex="0" data-fav="${esc(pid)}" aria-pressed="${isFav(pid)}" aria-label="${isFav(pid) ? "찜 빼기" : "찜하기"}">${HEART}</span>`;
   let favBusy = false;
   async function toggleFav(pid) {
     if (favBusy) return; favBusy = true;
@@ -584,7 +610,7 @@
   }
   function bindFav(root) {
     $$("[data-fav]", root).forEach((b) => {
-      const go = (e) => { e.preventDefault(); e.stopPropagation(); b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true"); b.classList.add("bump"); toggleFav(b.dataset.fav); };
+      const go = (e) => { e.preventDefault(); e.stopPropagation(); favBumped = { id: b.dataset.fav, t: Date.now() }; b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true"); b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); toggleFav(b.dataset.fav); };
       b.onclick = go; b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") go(e); };
     });
   }
@@ -630,7 +656,10 @@
     } else {
       // 내 기록: 내가 등록한(다녀온 기록) / 내가 찜한(♥)
       const all2 = state.places.map((p) => ({ p, st: stats(p) }));
-      const mine = state.reviews.filter((r) => r.uid === state.user.uid && r.status === "visited").sort((a, b) => b.createdAt - a.createdAt);
+      // 가게마다 내 기록 하나 (재방문은 그 기록에 방문 횟수로 합침) — 최근에 다녀온 곳부터
+      const myBy = new Map();
+      for (const r of state.reviews) if (r.uid === state.user.uid && r.status === "visited" && placeById(r.placeId)) { if (!myBy.has(r.placeId)) myBy.set(r.placeId, []); myBy.get(r.placeId).push(r); }
+      const mine = [...myBy.values()].map(mergeVisits).sort((a, b) => b.last - a.last);
       const favs = all2.filter((x) => isFav(x.p.id)).sort((a, b) => Math.max(...myWishes(b.p.id).map((r) => r.createdAt)) - Math.max(...myWishes(a.p.id).map((r) => r.createdAt)));
       const mt = state.mineTab || "mine";
       const seg = `<div class="seg sortbar" role="group" aria-label="내 기록 보기"><button data-mt="mine" aria-pressed="${mt === "mine"}">내가 등록한 ${mine.length}</button><button data-mt="fav" aria-pressed="${mt === "fav"}">♥ 내가 찜한 ${favs.length}</button></div>`;
@@ -641,9 +670,9 @@
         const im = myImpact();
         html = `<div class="section-h">내 기록 ${mine.length}</div><div class="section-sub">${esc(state.user.name)}님이 다녀와서 남긴 기록</div>${seg}` +
           (im.places ? `<div class="impact"><span class="impact-n">${im.viewers}</span><span>${im.viewers ? `내 기록 ${im.places}곳 · 멤버 <b>${im.viewers}명</b>이 봤어요` : `내 기록 ${im.places}곳 · 아직 본 멤버 없음`}</span></div>` : "") +
-          (mine.length ? mine.map((r) => { const p = placeById(r.placeId); if (!p) return "";
+          (mine.length ? mine.map((c) => { const p = placeById(c.base.placeId); if (!p) return "";
             return `<button class="row" data-place="${esc(p.id)}">${thumbHTML(p)}<div class="row-main"><div class="row-name">${esc(p.name)}</div>
-              <div class="row-meta">${isRevisit(r) ? `<span class="again">🔁 재방문</span>` : `<span class="rate"><i>★</i> ${r.rating}</span>`}${r.menu ? `<span>${esc(r.menu)}</span>` : ""}<span>${ago(r.createdAt)}</span></div></div><span class="row-side">${heartHTML(p.id)}</span></button>`; }).join("")
+              <div class="row-meta">${c.rated ? `<span class="rate"><i>★</i> ${c.base.rating}</span>` : ""}${c.visits > 1 ? `<span class="again">🔁 ${c.visits}회 방문</span>` : ""}${c.menus.length ? `<span>${esc(c.menus.slice(-2).join(" · "))}</span>` : ""}<span>${ago(c.last)}</span></div></div><span class="row-side">${heartHTML(p.id)}</span></button>`; }).join("")
             : `<p class="empty">아직 남긴 기록이 없어요.</p>`);
       }
     }
@@ -875,19 +904,20 @@
     const st = stats(p), l = links(p), me = state.user.uid, img = curImage(p);
     const mineAny = st.rs.some((r) => r.uid === me), others = st.rs.some((r) => r.uid !== me);
     const myFirst = st.first.some((r) => r.uid === me);   // 이미 처음 기록을 남긴 곳이면 → 재방문 기록
-    // 그 멤버의 몇 번째 방문인지 (오래된 기록부터 1, 2, 3…)
-    const nth = (r) => st.visited.filter((x) => x.uid === r.uid && x.createdAt <= r.createdAt).length;
     const whoBtn = (r) => member(r.userName) ? `<button class="who who-link" data-who-go="${esc(r.userName)}">${esc(r.userName)}님</button>` : `<span class="who">${esc(r.userName)}님</span>`;
-    const reviews = st.visited.map((r) => `<div class="review${isRevisit(r) ? " revisit" : ""}">${avatar(r.userName, true)}<div class="review-body">
-        <div class="review-top">${whoBtn(r)}<span class="when">${ago(r.createdAt)}</span></div>
-        ${isRevisit(r) ? `<div class="tags"><span class="tag again">🔁 재방문 · ${nth(r)}번째</span></div>`
-          : `<div class="stars-s">${starsTxt(r.rating)}</div>
-        <div class="tags">${r.wait ? `<span class="tag">${WAIT[r.wait]}</span>` : ""}${r.solo ? `<span class="tag">${SOLO[r.solo]}</span>` : ""}${r.price ? `<span class="tag">${won(r.price)}</span>` : ""}</div>`}
-        ${r.menu ? `<div class="review-menu">${isRevisit(r) ? "먹은 메뉴" : "추천 메뉴"} <b>${esc(r.menu)}</b></div>` : ""}
-        ${(r.picks || []).length ? `<div class="tags">${r.picks.filter((k) => PICKS[k]).map((k) => `<span class="tag pick">${PICKS[k]}</span>`).join("")}</div>` : ""}
-        ${r.memo ? `<p class="review-memo">${esc(r.memo)}</p>` : ""}
-        ${r.thumb ? `<button class="review-ph" data-rph="${esc(r.id)}" aria-label="사진 크게 보기"><img src="${r.thumb}" alt="" />${r.photoCount > 1 ? `<span>+${r.photoCount - 1}</span>` : ""}</button>` : ""}
-        ${r.uid === me ? `<div class="mine-acts"><button class="del" data-edit="${esc(r.id)}">수정</button><span aria-hidden="true">·</span><button class="del" data-del="${esc(r.id)}">삭제</button></div>` : isAdmin() ? `<button class="del" data-del="${esc(r.id)}">기록 삭제 (관리자)</button>` : ""}</div></div>`).join("");
+    const cards = memberCards(st);
+    const reviews = cards.map((c) => { const b = c.base, mine = c.uid === me, ids = c.vs.map((r) => r.id).join(",");
+      return `<div class="review${c.visits > 1 ? " revisit" : ""}">${avatar(c.userName, true)}<div class="review-body">
+        <div class="review-top"><span class="who-line">${whoBtn(b)}<span class="visit-n${c.visits > 1 ? " again" : ""}">${c.visits > 1 ? "🔁 " : ""}${c.visits}회 방문</span></span><span class="when">${ago(c.last)}</span></div>
+        ${c.rated ? `<div class="stars-s">${starsTxt(b.rating)}</div>` : ""}
+        ${!isRevisit(b) && (b.wait || b.solo || b.price) ? `<div class="tags">${b.wait ? `<span class="tag">${WAIT[b.wait]}</span>` : ""}${b.solo ? `<span class="tag">${SOLO[b.solo]}</span>` : ""}${b.price ? `<span class="tag">${won(b.price)}</span>` : ""}</div>` : ""}
+        ${c.menus.length ? `<div class="review-menu">추천 메뉴 <b>${c.menus.map(esc).join(" · ")}</b></div>` : ""}
+        ${c.picks.length ? `<div class="tags">${c.picks.map((k) => `<span class="tag pick">${PICKS[k]}</span>`).join("")}</div>` : ""}
+        ${c.memo ? `<p class="review-memo">${esc(c.memo)}</p>` : ""}
+        ${c.thumb ? `<button class="review-ph" data-rph="${esc(ids)}" aria-label="사진 크게 보기"><img src="${c.thumb}" alt="" />${c.photoCount > 1 ? `<span>+${c.photoCount - 1}</span>` : ""}</button>` : ""}
+        ${c.visits > 1 ? `<details class="visits"><summary>방문 내역 ${c.visits}</summary><ol class="visit-list">${c.vs.map((r, i) => `<li><span class="vd">${md(r.createdAt)}</span><span class="vt">${i === 0 && !isRevisit(r) ? `처음${r.rating ? ` · ★ ${(+r.rating).toFixed(1)}` : ""}` : `${i + 1}번째`}</span><span class="vm">${esc([r.menu, r.memo && `“${r.memo}”`].filter(Boolean).join(" · ") || (r.photoCount ? `사진 ${r.photoCount}장` : "간 기록만"))}</span>${mine ? `<button class="link" data-edit="${esc(r.id)}">수정</button>` : isAdmin() ? `<button class="link danger" data-del="${esc(r.id)}">삭제</button>` : ""}</li>`).join("")}</ol></details>` : ""}
+        ${mine ? `<div class="mine-acts"><button class="del" data-edit="${esc(b.id)}">${isRevisit(b) ? "수정" : "내 기록 수정"}</button>${c.visits > 1 ? "" : `<span aria-hidden="true">·</span><button class="del" data-del="${esc(b.id)}">삭제</button>`}</div>`
+          : isAdmin() ? `<button class="del" data-del-group="${esc(ids)}">기록 삭제 (관리자)</button>` : ""}</div></div>`; }).join("");
     const wishers = st.wish.length ? `<p class="wishers">♡ 가고 싶은 멤버 ${st.wish.map((r) => `<b>${esc(r.userName)}님</b>${r.menu ? ` (${esc(r.menu)})` : ""}${r.memo ? ` · <span class="wish-memo">“${esc(r.memo)}”</span>` : ""}${r.uid === me ? ` <button class="link" data-edit="${esc(r.id)}">수정</button> <button class="link" data-del="${esc(r.id)}">취소</button>` : isAdmin() ? ` <button class="link" data-del="${esc(r.id)}">취소</button>` : ""}`).join(", ")}</p>` : "";
     const canDelCover = img && isAdmin();   // 대표 사진 올리기·빼기는 관리자만 (멤버는 기록 사진이 자동으로 대표 사진이 됨)
     const hero = `<div class="hero">${thumbHTML(p, "thumb").replace('class="thumb"', 'style="position:absolute;inset:0"')}
@@ -904,7 +934,7 @@
         <div class="stat"><div class="k">평균</div><div class="v">${st.price ? `${(st.price / 1000).toFixed(st.price % 1000 ? 1 : 0)}천원` : "–"}</div></div>
       </div>
       <div class="stack">
-        <button class="btn btn-primary btn-block" data-act="review">${myFirst ? "🔁 재방문 기록 남기기" : "기록 남기기"}</button>
+        <button class="btn btn-primary btn-block" data-act="review">${myFirst ? "🔁 또 왔어요 · 내 기록 업데이트" : "기록 남기기"}</button>
         ${mineAny ? "" : `<button class="btn btn-secondary btn-block" data-act="wish">♡ 찜하고 메모 남기기</button>`}
         <button class="btn btn-plain btn-block" data-act="meet">🍽 여기로 오늘 약속 만들기</button>
         <div class="btns"><a class="btn btn-plain" href="${l.naver}" data-dir="naver" target="_blank" rel="noopener">네이버 길찾기</a><a class="btn btn-plain" href="${l.kakao}" data-dir="kakao" target="_blank" rel="noopener">카카오 길찾기</a></div>
@@ -915,7 +945,7 @@
       <div class="h3 menu-h">메뉴판<label class="link menu-add"><input type="file" accept="image/*" multiple hidden id="menuIn" />＋ 메뉴판 사진 올리기</label></div>
       <div class="menu-board" id="menuBoard"><p class="empty" style="padding:4px 0">아직 메뉴판 사진이 없어요. 가게에서 찍어두면 다음 사람이 메뉴 고르기 쉬워요.</p></div>
       <div class="gallery" id="gallery" hidden></div>
-      <div class="h3">멤버 기록 ${st.visits}${st.revisits ? `<span class="h3-n">재방문 ${st.revisits}</span>` : ""}</div>
+      <div class="h3">멤버 기록 ${cards.length}${st.visits > cards.length ? `<span class="h3-n">방문 ${st.visits}회</span>` : ""}</div>
       ${reviews || `<p class="empty" style="padding:8px 0">아직 가본 멤버의 기록이 없어요. 다녀왔다면 첫 기록을 남겨주세요.</p>`}
       ${isAdmin() ? `<div class="admin-tools"><span class="admin-tag">관리자</span><button class="link" data-act="editplace">장소 정보 수정</button><button class="link danger" data-act="delplace">장소와 기록 모두 삭제</button></div>`
         : p.createdBy === me && !others ? `<button class="del" data-act="delplace" style="margin-top:18px">이 장소 삭제</button>` : ""}
@@ -951,6 +981,12 @@
     const ni = $("[data-act=nextimg]", s); if (ni) ni.onclick = () => state.store.updatePlace(p.id, { imageIdx: ((p.imageIdx || 0) + 1) % p.images.length });
     $$("[data-edit]", s).forEach((b) => (b.onclick = () => { const r = state.reviews.find((x) => x.id === b.dataset.edit); if (r) openReviewForm(r.placeId, r.status, r.id); }));
     $$("[data-del]", s).forEach((b) => (b.onclick = async () => { if (!confirm("이 기록을 삭제할까요?")) return; await state.store.deleteReview(b.dataset.del); state.store.deletePhotosOf?.("reviewId", b.dataset.del); toast("삭제했어요"); }));
+    // 관리자: 한 멤버의 이 가게 기록(방문 전부)을 한 번에 삭제
+    $$("[data-del-group]", s).forEach((b) => (b.onclick = async () => {
+      const ids = b.dataset.delGroup.split(","); if (!confirm(`이 멤버의 기록 ${ids.length}개(방문 ${ids.length}회)를 모두 삭제할까요?`)) return;
+      for (const id of ids) { await state.store.deleteReview(id); state.store.deletePhotosOf?.("reviewId", id); }
+      toast("삭제했어요");
+    }));
     // 멤버 사진: 가게를 열 때만 원본을 불러와서 사진 모음 + 상단 대표 사진으로
     const loadPhotos = () => state.store.listPhotos ? state.store.listPhotos(p.id).then((all) => {
         if (state.selected !== p.id || state.sheet !== "place") return;
@@ -968,7 +1004,8 @@
         if (g) g.innerHTML = `<div class="h3" style="margin-top:0">멤버 사진 ${list.length}</div><div class="gallery-row">${list.map((ph, i) => `<button class="gal" data-gal="${i}"><img src="${ph.data}" alt="" />${ph.menu ? `<span>${esc(ph.menu)}</span>` : ""}</button>`).join("")}</div>`;
         if (g) g.hidden = false;
         if (g) $$("[data-gal]", g).forEach((b) => (b.onclick = () => openLightbox(list.map((x) => x.data), +b.dataset.gal)));
-        $$("[data-rph]", s).forEach((b) => (b.onclick = () => { const mine = list.filter((x) => x.reviewId === b.dataset.rph); if (mine.length) openLightbox(mine.map((x) => x.data)); }));
+        // 합친 기록의 사진: 그 멤버가 이 가게에서 남긴 사진 전부 (최근 것부터)
+        $$("[data-rph]", s).forEach((b) => (b.onclick = () => { const ids = b.dataset.rph.split(","); const mine = list.filter((x) => ids.includes(x.reviewId)).sort((a, c) => c.createdAt - a.createdAt); if (mine.length) openLightbox(mine.map((x) => x.data)); }));
         const hi = $(".hero img", s), hero = $(".hero", s), cov = curImage(p);
         if (hero && cov) { const full = all.find((x) => x.id === cov.photoId); if (full && hi) hi.src = full.data; }
         else if (hero) {
@@ -1230,8 +1267,10 @@
       const pr = $("#rprice", s); if (pr) pr.oninput = () => { pr.value = pr.value.replace(/\D/g, ""); f.price = pr.value; };
       $$("[data-ph-del]", s).forEach((b) => (b.onclick = () => { const [x] = f.photos.splice(+b.dataset.phDel, 1); if (x?.existing) f.removed.push(x.id); render(); }));
       const rd = $("#rdel", s); if (rd) rd.onclick = async () => {
-        if (!confirm("이 기록을 삭제할까요? 같이 올린 사진도 지워져요.")) return;
-        await state.store.deleteReview(f.editId); state.store.deletePhotosOf?.("reviewId", f.editId);
+        // 처음 기록을 지우면 내 기록 전체(재방문까지)를 같이 지움 — 별점 없는 재방문만 남지 않게
+        const more = f.status === "visited" ? state.reviews.filter((r) => r.placeId === placeId && r.uid === state.user.uid && isRevisit(r)) : [];
+        if (!confirm(more.length ? `내 기록을 삭제할까요? 이 가게의 방문 ${more.length + 1}회 기록과 사진이 모두 지워져요.` : "이 기록을 삭제할까요? 같이 올린 사진도 지워져요.")) return;
+        for (const id of [f.editId, ...more.map((r) => r.id)]) { await state.store.deleteReview(id); state.store.deletePhotosOf?.("reviewId", id); }
         state.form = null; toast("기록을 삭제했어요"); openPlace(placeId);
       };
       const pi = $("#rphoto", s);
@@ -1257,12 +1296,12 @@
     const n = st.visited.filter((r) => r.uid === me && r.createdAt <= at).length + (f.editId ? 0 : 1);   // 이번이 몇 번째 방문인지
     const known = topMenus(st.visited, 6);   // 이 가게에서 멤버들이 적은 메뉴 — 누르면 바로 입력
     const s = showSheet(`
-      ${head(esc(p.name), `<span class="again">🔁 ${n}번째 방문</span><span>${f.editId ? "재방문 기록 수정" : "별점 없이 간단하게"}</span>`)}
-      <p class="revisit-note">별점은 처음 남긴 기록 그대로예요. 아무것도 안 적고 <b>간 기록만 남기기</b>를 눌러도 방문이 쌓여서 🔁 또간집과 멤버별 '자주 간 곳'에 반영돼요.</p>
-      <div class="field"><label class="flabel" for="rmenu">오늘 먹은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="${esc(known[0] || "제육 정식")}" value="${esc(f.menu)}" />
+      ${head(esc(p.name), `<span class="again">🔁 ${n}회째 방문</span><span>${f.editId ? "이 방문 기록 수정" : "내 기록에 방문 추가"}</span>`)}
+      <p class="revisit-note">새 기록이 따로 생기지 않고 <b>내 기록에 더해져요</b>. 방문 횟수가 ${n}회로 올라가고, 적은 메뉴는 내 추천 메뉴에 추가돼요. 아무것도 안 적고 <b>간 기록만 남기기</b>를 눌러도 돼요.</p>
+      <div class="field"><label class="flabel" for="rmenu">오늘 먹은 메뉴 <span class="opt">선택 · 내 추천 메뉴에 추가돼요</span></label><input class="input" id="rmenu" maxlength="40" placeholder="${esc(known[0] || "제육 정식")}" value="${esc(f.menu)}" />
         ${known.length ? `<div class="chips sub quick-menus" aria-label="이 가게에서 멤버들이 먹은 메뉴">${known.map((m) => `<button class="chip" data-qm="${esc(m)}" aria-pressed="${!!f.menu && menuKey(f.menu) === menuKey(m)}">${esc(m)}</button>`).join("")}</div>` : ""}</div>
       <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
-      <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="이번엔 곱빼기로 · 새 메뉴 나왔어요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
+      <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택 · 적으면 내 기록 메모가 이걸로 바뀌어요</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="이번엔 곱빼기로 · 새 메뉴 나왔어요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
       <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 가장 최근 사진이 목록 대표 사진이 돼요</span></span>
         <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
           ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
@@ -1344,7 +1383,7 @@
           btn.textContent = `사진 올리는 중 ${i + 1}/${photos.length}`;
           await state.store.addPhoto({ placeId: state.selected, reviewId: rid, uid: state.user.uid, userName: state.user.name, menu, data: photos[i].full });
         }
-        toast(photos.length ? `🔁 ${n}번째 방문을 사진 ${photos.length}장과 함께 남겼어요` : `🔁 ${n}번째 방문을 남겼어요`);
+        toast(photos.length ? `🔁 내 기록을 ${n}회 방문으로 업데이트했어요 · 사진 ${photos.length}장` : `🔁 내 기록을 ${n}회 방문으로 업데이트했어요`);
         const id = state.selected; state.form = null; openPlace(id); return;
       }
       if (f.editId) {
@@ -1841,7 +1880,8 @@
     const release = () => { if (cur) { cur.classList.remove("is-pressed"); cur = null; } };
     document.addEventListener("pointerdown", (e) => {
       const el = e.target.closest(sel);
-      if (!el || el.disabled) return;
+      // 목록 줄 안의 하트를 누를 땐 줄 전체가 눌린 것처럼 보이지 않게 (하트만 반응)
+      if (!el || el.disabled || e.target.closest(".fav")) return;
       cur = el; sx = e.clientX; sy = e.clientY;
       el.classList.add("is-pressed");
       if (el.matches(".btn-primary,.fab,.roulette-btn") && e.pointerType === "touch") navigator.vibrate?.(6);
