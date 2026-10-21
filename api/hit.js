@@ -41,6 +41,11 @@ async function log(req, f) {
 }
 
 module.exports = async (req, res) => {
+  if (req.query.purge === "iconlog") {   // 진단 끝: 기록 전부 지우기
+    const db = admin.firestore(firebaseApp()); let n = 0;
+    for (;;) { const snap = await db.collection("_iconlog").limit(300).get(); if (snap.empty) break; const b = db.batch(); snap.docs.forEach((d) => b.delete(d.ref)); await b.commit(); n += snap.size; }
+    return res.status(200).json({ deleted: n });
+  }
   if (req.query.log) {
     try {
       const snap = await admin.firestore(firebaseApp()).collection("_iconlog").orderBy("t", "desc").limit(60).get();
