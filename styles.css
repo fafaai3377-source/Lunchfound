@@ -1002,11 +1002,9 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .avatar.anon { background: var(--fill-2); color: var(--ink-3); display: inline-grid; place-items: center; }
 .avatar.anon svg { width: 70%; height: 70%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 
-/* 첫 화면: 로고·문구를 75% 크기로, 시작하기는 브랜드 빨강 (10/21) */
+/* 첫 화면: 로고·문구를 75% 크기로 (10/21). 시작하기 버튼은 다른 주요 버튼과 같은 파랑 (10/22 빨강에서 되돌림) */
 .intro-brand .logo { width: min(75%, 210px); }
 .intro-copy { font-size: 13px; }
-.intro-go.btn-primary { background: var(--brand); }
-.intro-go.btn-primary:active { background: #B8241C; }
 
 /* 장소 추가: 공공데이터 식당 목록 (10/21) */
 .src-note { margin: 10px 2px 0; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
