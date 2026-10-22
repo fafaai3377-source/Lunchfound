@@ -1937,7 +1937,7 @@
     location.href = `x-safari-https://${location.host}/`;
     setTimeout(() => { if (document.visibilityState === "visible") done(); }, 1200);
   }
-  const oldIconNote = `<p class="hint" style="margin-top:10px">홈 화면에 예전에 추가한 아이콘(Lunchfound 포함)이 있으면 먼저 길게 눌러 지운 다음 다시 추가해 주세요. 휴대폰이 예전 아이콘을 기억하고 있을 수 있어요.</p>`;
+  const oldIconNote = "";   // 예전 아이콘 지우라는 안내는 10/22(v65)에 뺌
   function openInstall() {
     const browser = isIOS() ? "Safari로" : "크롬으로", kakaoAnd = isKakao() && !isIOS();
     const how = standalone() ? `<p class="empty">이미 앱으로 쓰고 있어요 👍</p>`
