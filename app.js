@@ -1906,7 +1906,7 @@
   function hideAlert() { $("#alert").hidden = true; clearTimeout(alertTimer); }
   function showMeetAlert(m) {
     const p = meetPlace(m), el = $("#alert");
-    el.innerHTML = `<div class="alert-in glass">${avatar(m.hostName, true)}<div class="alert-txt"><b>${esc(m.hostName)}님</b> ${dayWord(m)} ${LUNCH.start} ${emojiFor(p)} ${esc(p.name)} 먹으실 분!<span>선착순 ${mtCount(m)}/${m.capacity}명${m.note ? ` · ${esc(m.note)}` : ""}</span></div>
+    el.innerHTML = `<div class="alert-in glass">${avatar(m.hostName, true)}<div class="alert-txt"><b>${esc(m.hostName)}님</b> ${dayWord(m)} ${LUNCH.start} ${esc(p.name)} 먹으실 분!<span>선착순 ${mtCount(m)}/${m.capacity}명${m.note ? ` · ${esc(m.note)}` : ""}</span></div>
       <button class="btn btn-primary alert-go" data-a-join>참여</button><button class="close" data-a-x aria-label="닫기">✕</button></div>`;
     el.hidden = false;
     $("[data-a-join]", el).onclick = () => joinMeet(m.id);
@@ -2029,9 +2029,10 @@
   }
 
   // ───────── 공용 배너 (상단 알림 자리) ─────────
-  function showBanner({ icon, title, sub, actions = [], ms = 15000 }) {
+  // 배너는 글자만 (왼쪽 아이콘·설명 속 이모지 없이, 10/22 v76). icon 값은 받아도 쓰지 않음
+  function showBanner({ title, sub, actions = [], ms = 15000 }) {
     const el = $("#alert");
-    el.innerHTML = `<div class="alert-in glass"><span class="alert-ico">${icon}</span><div class="alert-txt"><b>${title}</b>${sub ? `<span>${sub}</span>` : ""}</div>
+    el.innerHTML = `<div class="alert-in glass"><div class="alert-txt"><b>${title}</b>${sub ? `<span>${sub}</span>` : ""}</div>
       ${actions.map((x, i) => `<button class="btn ${x.primary ? "btn-primary" : "btn-plain"} alert-go" data-b="${i}">${esc(x.label)}</button>`).join("")}<button class="close" data-a-x aria-label="닫기">✕</button></div>`;
     el.hidden = false;
     actions.forEach((x, i) => ($(`[data-b="${i}"]`, el).onclick = () => { hideAlert(); x.run(); }));
@@ -2048,7 +2049,7 @@
   }
   function nudgePopular() {
     const top = popularLastWeek();
-    const sub = top.length ? `지난주 멤버들이 많이 간 곳 · ${top.map((x) => `${emojiFor(x.p)} ${esc(x.p.name)}`).join(", ")}` : "아직 지난주 기록이 없어요. 오늘 약속을 먼저 올려보세요";
+    const sub = top.length ? `지난주 멤버들이 많이 간 곳 · ${top.map((x) => esc(x.p.name)).join(", ")}` : "아직 지난주 기록이 없어요. 오늘 약속을 먼저 올려보세요";
     showBanner({ icon: "🍽", title: `곧 점심이에요 · ${LUNCH.start} 시작`, sub,
       actions: top.length ? [{ label: "보기", primary: true, run: () => openPlace(top[0].p.id) }] : [{ label: "약속 만들기", primary: true, run: () => openMeetForm(null) }] });
     sysNotify(`곧 점심이에요 · ${LUNCH.start} 시작`, top.length ? `지난주 인기: ${top.map((x) => x.p.name).join(", ")}` : "오늘 같이 먹을 사람을 모아보세요", "popular");
