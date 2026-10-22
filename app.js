@@ -1608,7 +1608,7 @@
   }
 
   // ───────── 내 위치 (10/22, v67) — 지도에 포인트 색 점 + 물결 + 휴대폰이 보는 방향 ─────────
-  // 위치·방향은 이 기기 화면에만 쓰고 어디에도 저장·전송하지 않아요. 한 번 허용하면 다음부터는 앱을 열 때 바로 보여요(방향은 아이폰이면 버튼을 눌러야)
+  // 위치·방향은 이 기기 화면에만 쓰고 어디에도 저장·전송하지 않아요. 지도 오른쪽 ◉ 버튼을 누르면 켜지고 내 위치로 이동
   const me = { watch: null, pos: null, on: false, center: false, dir: null, dirOn: false, warned: false };
   const meOffY = () => { if (desk()) return 0; const top = $("#filterbar")?.getBoundingClientRect().bottom || 100, pr = $("#panel")?.getBoundingClientRect(); return Math.round((top - (pr ? Math.max(0, innerHeight - pr.top) : 0)) / 2); };
   function watchMe() {
@@ -1651,8 +1651,7 @@
     else on("ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation");
   }
   function stopHeading() { removeEventListener("deviceorientation", onOrient); removeEventListener("deviceorientationabsolute", onOrient); me.dirOn = false; me.dir = null; MapKit.setHeading?.(null); }
-  // 이미 허용한 기기면 앱을 열 때 바로 (안드로이드는 방향도). 화면을 떠나 있는 동안은 위치를 쉬어서 배터리 아끼기
-  navigator.permissions?.query?.({ name: "geolocation" }).then((st) => { if (st.state === "granted") { startLocate(false); if (typeof window.DeviceOrientationEvent?.requestPermission !== "function") startHeading(); } }).catch(() => {});
+  // ◉ 버튼을 눌렀을 때만 위치를 켬 (앱을 열 때 저절로 켜지 않음, 10/22 v68). 화면을 떠나 있는 동안은 위치를 쉬어서 배터리 아끼기
   document.addEventListener("visibilitychange", () => {
     if (!me.on) return;
     if (document.hidden) { if (me.watch != null) navigator.geolocation.clearWatch(me.watch); me.watch = null; }
@@ -2341,7 +2340,6 @@
     bindMapMode();
     $("#zin").onclick = () => MapKit.zoom(1);
     $("#zout").onclick = () => MapKit.zoom(-1);
-    $("#zhome").onclick = () => homeView();
     $("#zme").onclick = () => { startHeading(); startLocate(true); };   // 방향 권한(아이폰)은 누른 순간에 물어야 해서 먼저
     // 앱 화면·지도는 스크롤되면 안 됨: 브라우저가 포커스 때문에 밀어도 즉시 제자리로 (overflow: clip 미지원 브라우저 대비)
     ["#app", "#map"].forEach((s) => { const el = $(s); el.addEventListener("scroll", () => { if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; } }); });

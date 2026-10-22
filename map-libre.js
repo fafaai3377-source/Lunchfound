@@ -347,7 +347,7 @@
 
   const project = (lat, lng) => (map ? map.project([lng, lat]) : null);   // 위경도 → 화면 좌표 (확인용)
 
-  // ───────── 내 위치 (10/22, v67): 포인트 색 점 + 퍼지는 물결 + 정확도 원 + 휴대폰이 보는 방향(부채꼴) ─────────
+  // ───────── 내 위치 (10/22, v67~v68): 포인트 색 점 + 퍼지는 물결 + 휴대폰이 보는 방향(부채꼴) ─────────
   // 위치는 이 화면에 그리기만 하고 어디에도 저장·전송하지 않아요 (app.js가 watchPosition으로 넘겨줌)
   let meMk = null, meEl = null, meAcc = 0, meLat = 0;
   const accPx = () => { if (!map || !meAcc) return 0; const mpp = (156543.03392 * Math.cos((meLat * Math.PI) / 180)) / Math.pow(2, map.getZoom()); return Math.min(640, Math.round((meAcc / mpp) * 2)); };
@@ -356,7 +356,7 @@
     meAcc = acc || 0; meLat = lat;
     if (!meMk) {
       meEl = document.createElement("div"); meEl.className = "me-dot"; meEl.setAttribute("aria-label", "내 위치");
-      meEl.innerHTML = '<i class="me-acc"></i><i class="me-beam"></i><i class="me-pulse"></i><i class="me-pulse d2"></i><i class="me-core"></i>';
+      meEl.innerHTML = '<i class="me-beam"></i><i class="me-pulse"></i><i class="me-pulse d2"></i><i class="me-core"></i>';   // 정확도 원은 10/22(v68)에 뺌
       meMk = new maplibregl.Marker({ element: meEl, anchor: "center" }).setLngLat([lng, lat]).addTo(map);
       map.on("zoom", () => meEl?.style.setProperty("--acc", accPx() + "px"));
     } else meMk.setLngLat([lng, lat]);
