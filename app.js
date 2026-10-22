@@ -393,7 +393,7 @@
     if (MapKit.attribution) { const a = $("#attrib"); a.textContent = MapKit.attribution; a.hidden = false; }
     const el = document.createElement("div");
     el.className = "office";
-    el.innerHTML = `<div class="pin-b">◉ ${esc(C.office.name)}</div><div class="pin-t"></div>`;
+    el.innerHTML = `<div class="pin-b">${esc(C.office.name)}</div><div class="pin-t"></div>`;   // ◉ 표시는 10/22(v71)에 뺌
     MapKit.add(el, C.office.lat, C.office.lng, "bottom");
     // 핀 누르기 → 가게 정보 열기. 마우스로 누르면 지도 라이브러리가 "끌기"로 먼저 잡아채서 click이 핀에 안 오므로,
     // 누른 곳과 뗀 곳의 핀을 직접 찾아 같은 핀이고 거의 안 움직였으면 연다.
