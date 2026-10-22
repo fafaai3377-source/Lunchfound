@@ -441,10 +441,10 @@ input { font: inherit; color: inherit; }
 .steps li + li { margin-top: 6px; }
 
 /* ───────── 첫 화면 소개 (모션그래픽) ───────── */
-.intro { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow-y: auto; background: var(--parchment); padding: calc(env(safe-area-inset-top, 0px) + 24px) 20px calc(env(safe-area-inset-bottom, 0px) + 24px); }
+.intro { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; overflow-y: auto; background: var(--parchment); padding: calc(env(safe-area-inset-top, 0px) + 24px) 20px calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .intro.leave { animation: introOut 260ms var(--ease-out) forwards; }
 @keyframes introOut { to { opacity: 0; transform: scale(1.02); } }
-.intro-inner { width: 100%; max-width: 420px; text-align: center; }
+.intro-inner { width: 100%; max-width: 420px; text-align: center; margin: auto; }   /* margin:auto = 공간이 남으면 가운데, 모자라면 위부터 스크롤 (v75) */
 .intro-stage { position: relative; width: min(78vw, 320px); aspect-ratio: 1; margin: 0 auto 28px; border-radius: 28px; overflow: hidden; background: #F5F4F1; box-shadow: 0 20px 50px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.06); }
 .intro-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .intro-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -1048,7 +1048,9 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .hours-box summary::-webkit-details-marker { display: none; }
 .hours-box summary::after { content: "›"; margin-left: auto; color: var(--ink-3); font-size: 17px; transform: rotate(90deg); transition: transform 180ms var(--ease-out); }
 .hours-box[open] summary::after { transform: rotate(-90deg); }
-.hours-today { color: var(--ink-2); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hours-sum { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; row-gap: 2px; }
+.hours-today { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+.hours-week li span:last-child { white-space: nowrap; }
 .hours-week { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 5px; }
 .hours-week li { display: flex; gap: 14px; color: var(--ink-2); }
 .hours-week li span:first-child { width: 1.2em; flex: none; color: var(--ink-3); }
@@ -1093,3 +1095,38 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 /* ◉ 내 위치 버튼: 켜지면 검정 채움 대신 ◉만 포인트 색으로 */
 #zme { font-size: 20px; }
 #zme.on { background: var(--glass); color: var(--accent-map); }
+
+/* ═════════ 줄바꿈 다듬기 (10/22, v75) ═════════
+   한국어는 낱말 단위로 줄을 바꾸고(keep-all), 제목·짧은 안내는 줄 길이를 고르게(balance),
+   문단은 마지막 줄에 한두 글자만 남지 않게(pretty). 지원하지 않는 브라우저는 지금처럼 보여요 */
+h1, h2, h3, .h3, .section-h, .section-sub, .sheet-head .sub > *, .flabel, .hint, .empty, .data-msg, .login-help, .intro-copy, .gd-body h3, .dir-note, .src-note, .hours-warn { text-wrap: balance; }
+p, li, .review-memo, .tc-memo, .guest-note, .gd-body p, .hours-note, .wishers { text-wrap: pretty; }
+.btn, .chip, .tag, .seg button, .tip-more, .gd-btn, .pick-agg, .tc-picks span, .hs, .stat .k, .stat .v { white-space: nowrap; }
+
+/* ═════════ 화면 크기별 다듬기 (10/22, v75) ═════════ */
+/* 휴대폰 가로(높이 500px 이하): 첫 화면은 그림 왼쪽 · 로고와 버튼 오른쪽 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .intro-inner { max-width: 760px; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 36px; align-items: center; text-align: left; }
+  .intro-stage { grid-row: 1 / span 3; width: min(72vh, 300px); margin: 0; }
+  .intro-brand { justify-content: flex-start; }
+  .intro-brand .logo { margin: 0; }
+  .intro-copy { margin: 10px 0 20px; }
+  .login-inner { padding-top: calc(24px + env(safe-area-inset-top, 0px)); }
+}
+/* 휴대폰 가로·아주 낮은 화면: 지도 버튼이 위 버튼줄에 겹치지 않게 확대·축소 버튼은 숨김 (두 손가락으로 확대·축소) */
+@media (max-height: 560px) and (pointer: coarse) and (max-width: 899px) {
+  .mapctl #zin, .mapctl #zout { display: none; }
+  .mapctl { gap: 8px; }
+}
+/* 태블릿 세로·휴대폰 가로(600~899px): 아래 목록과 시트를 가운데 600px까지만 (글줄·버튼이 너무 길어지지 않게) */
+@media (min-width: 600px) and (max-width: 899px) {
+  .sheet, .panel { left: calc(50% - 300px); right: calc(50% - 300px); }
+}
+/* 아주 좁은 휴대폰(359px 이하): 장소 추가의 "주소로 등록 · 지도에서 찍기"는 한 줄에 하나씩 (글자 잘림 방지) */
+@media (max-width: 359px) {
+  .add-alt .btn { flex: 1 1 100%; }
+}
+/* 좁은 휴대폰(380px 이하): 목록의 긴 가게 이름은 말줄임 대신 두 줄까지 */
+@media (max-width: 380px) {
+  .row-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-wrap: balance; }
+}

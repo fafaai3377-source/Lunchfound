@@ -12,7 +12,8 @@
     .filter(([o, c]) => Number.isFinite(o) && Number.isFinite(c)).map(([o, c]) => [o, c <= o ? c + 1440 : c]);
   const has = (h) => !!h && DAYS.some((d) => typeof h[d] === "string");
   const dayIdx = (d) => (d.getDay() + 6) % 7;   // 월 = 0
-  const pretty = (v) => (v ? String(v).split(",").map((r) => r.replace("-", " – ")).join(", ") : "쉬는 날");
+  // 표시: "11:00~15:00, 17:00~21:30" (시간 범위는 물결 ~ 로 통일, 10/22 v75)
+  const pretty = (v) => (v ? String(v).split(",").map((r) => r.replace("-", "~")).join(", ") : "쉬는 날");
 
   const left = (kind, c) => kind === "soon" ? { kind, short: "곧 마감", text: `곧 마감 · ${fmt(c)}까지` } : { kind, short: "영업 중", text: `영업 중 · ${fmt(c)}까지` };
   // 지금 상태: open(영업 중) / soon(30분 안에 마감) / before(영업 전) / break(브레이크타임) / closed(영업 종료) / off(오늘 쉬는 날)

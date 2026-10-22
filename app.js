@@ -548,7 +548,8 @@
     if (pinned && !desk()) {
       // 모바일: 상단 버튼·필터 아래에 가로로 꽉 차게
       const top = ($(".topbar")?.getBoundingClientRect().bottom || 100) + 6;
-      tip.style.left = "12px"; tip.style.right = "12px"; tip.style.top = `${top}px`; tip.style.width = "auto";
+      const side = Math.max(12, Math.round((innerWidth - 560) / 2));   // 태블릿·가로 화면에서는 가운데 560px까지만 (v75)
+      tip.style.left = `${side}px`; tip.style.right = `${side}px`; tip.style.top = `${top}px`; tip.style.width = "auto";
       tip.classList.add("below");
     } else {
       tip.style.right = ""; tip.style.width = "";
@@ -1118,7 +1119,7 @@
     const render = () => {
       const s = showSheet(`
         ${head(esc(r.name), `<b>사옥에서 도보 ${walkMin(r.lat, r.lng)}분</b>${r.address ? `<span>${esc(r.address)}</span>` : ""}`)}
-        <div class="field"><span class="flabel">어떤 종류인가요? <span class="opt">${guess !== "기타" ? "자동으로 골라뒀어요 · 다르면 바꿔주세요" : "하나 골라주세요"}</span></span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
+        <div class="field"><span class="flabel">어떤 종류인가요? <span class="opt">${guess !== "기타" ? "자동으로 골라뒀어요 · 다르면 바꿔주세요" : "하나 골라주세요"}</span></span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="csave">저장하고 기록 남기기</button></div>
       `, "add");
       bindCatPick(s, f, render);
@@ -1135,7 +1136,7 @@
   // 큰 분류 + 세부 종류(선택). f[catKey] / f[subKey]를 바꾸고 render로 다시 그림
   function catPickHTML(cat, sub) {
     const subs = SUBS[cat] || [], own = sub && !subs.includes(sub) ? sub : "";
-    return catChipsHTML(cat, "cp") + (cat ? `<div class="sub-pick"><span class="sub-l">세부 종류 <span class="opt">선택 · 목록에 보여요</span></span>
+    return catChipsHTML(cat, "cp") + (cat ? `<div class="sub-pick"><span class="sub-l">세부 종류 <span class="opt">선택 · 목록에 보여요</span></span>
       <div class="chips sub">${subs.map((x) => `<button class="chip" data-cp-sub="${esc(x)}" aria-pressed="${sub === x}">${esc(x)}</button>`).join("")}<input class="input sub-in" data-cp-own maxlength="12" placeholder="직접 입력" value="${esc(own)}" /></div></div>` : "");
   }
   function bindCatPick(s, f, render, catKey = "category", subKey = "note") {
@@ -1265,7 +1266,7 @@
         <div class="field"><label class="flabel" for="pname">가게 이름</label><input class="input" id="pname" maxlength="30" placeholder="간판에 적힌 이름 그대로" value="${esc(f.name)}" autocomplete="off" /><p class="err" id="perr"></p>
           ${nearby.length ? `<div class="near-st"><span class="sub-l">${f.store ? "같은 건물 다른 가게" : "이 자리 가게"} <span class="opt">누르면 이름·종류가 채워져요</span></span><div class="chips">${nearby.map((r, i) => `<button class="chip" data-near="${i}">${esc(r.name)}</button>`).join("")}</div></div>` : ""}</div>
         <div class="field"><span class="flabel">종류</span>${catPickHTML(f.category, f.note)}<p class="err" id="cerr"></p></div>
-        <div class="field"><label class="flabel" for="paddr">주소 <span class="opt">찍은 위치로 자동 입력 · 고쳐도 돼요</span></label><input class="input" id="paddr" maxlength="60" placeholder="예: 동교로 194" value="${esc(f.address)}" autocomplete="off" /></div>
+        <div class="field"><label class="flabel" for="paddr">주소 <span class="opt">찍은 위치로 자동 입력 · 고쳐도 돼요</span></label><input class="input" id="paddr" maxlength="60" placeholder="예: 동교로 194" value="${esc(f.address)}" autocomplete="off" /></div>
         <div class="stack" style="margin-top:24px"><button class="btn btn-primary btn-block" id="psave">저장하고 기록 남기기</button></div>
       `, "pin");
       $("#scrim").hidden = true;
@@ -1318,19 +1319,19 @@
         <div class="field"><div class="seg"><button data-status="visited" aria-pressed="${v}">가봤어요</button><button data-status="wish" aria-pressed="${!v}">♡ 가고 싶어요</button></div></div>
         ${v ? `
           <div class="field"><span class="flabel">별점 <span class="opt">이것만 있으면 저장돼요</span></span><div class="stars half" role="group" aria-label="별점 (0.5점 단위)">${[1, 2, 3, 4, 5].map((n) => `<span class="st" data-fill="${f.rating >= n ? "full" : f.rating >= n - 0.5 ? "half" : ""}"><button data-star="${n - 0.5}" aria-label="${n - 0.5}점" aria-pressed="${f.rating === n - 0.5}"></button><button data-star="${n}" aria-label="${n}점" aria-pressed="${f.rating === n}"></button></span>`).join("")}<span class="star-v">${f.rating ? `${f.rating.toFixed(1)}점` : "0.5점 단위"}</span></div><p class="err" id="rerr"></p></div>
-          <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택 · 팁, 추천, 주의할 점</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="2층 창가 자리가 넓어요 · 점심 세트에 음료 포함">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
+          <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택 · 팁, 추천, 주의할 점</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="2층 창가 자리가 넓어요 · 점심 세트에 음료 포함">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
           <div class="form-more">아래는 아는 것만 골라주세요 <span>모두 선택</span></div>
           <div class="field"><span class="flabel">점심시간 웨이팅 <span class="opt">선택</span></span><div class="chips">${chips("wait", WAIT)}</div></div>
           <div class="field"><span class="flabel">혼밥 <span class="opt">선택</span></span><div class="chips">${chips("solo", SOLO)}</div></div>
           <div class="field"><label class="flabel" for="rmenu">추천 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="제육 정식" value="${esc(f.menu)}" /></div>
-          <div class="field"><label class="flabel" for="rprice">내가 낸 가격 <span class="opt">선택 · 만원 미만이면 💸 거지맵에 들어가요</span></label><input class="input" id="rprice" inputmode="numeric" maxlength="7" placeholder="9000" value="${esc(f.price)}" /></div>
-          <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
-          <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 첫 장이 목록 대표 사진이 돼요</span></span>
+          <div class="field"><label class="flabel" for="rprice">내가 낸 가격 <span class="opt">선택 · 만원 미만이면 💸 거지맵에 들어가요</span></label><input class="input" id="rprice" inputmode="numeric" maxlength="7" placeholder="9000" value="${esc(f.price)}" /></div>
+          <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
+          <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 첫 장이 목록 대표 사진이 돼요</span></span>
             <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
               ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
             <p class="err" id="phErr"></p></div>`
         : `<div class="field"><label class="flabel" for="rmenu">먹어보고 싶은 메뉴 <span class="opt">선택</span></label><input class="input" id="rmenu" maxlength="40" placeholder="더블 치즈버거" value="${esc(f.menu)}" /></div>
-           <div class="field"><label class="flabel" for="rmemo">메모 <span class="opt">선택 · 왜 가고 싶은지, 누구랑 가고 싶은지</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="인스타에서 봤는데 웨이팅 있대요 · 금요일에 같이 가요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>`}
+           <div class="field"><label class="flabel" for="rmemo">메모 <span class="opt">선택 · 왜 가고 싶은지, 누구랑 가고 싶은지</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="인스타에서 봤는데 웨이팅 있대요 · 금요일에 같이 가요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>`}
         ${f.editId ? `<div class="stack" style="margin-top:22px"><button class="btn btn-plain btn-block danger-text" id="rdel">이 기록 삭제</button></div>` : ""}
         <div class="save-bar">${saveBtnHTML(f)}</div>
       `, "review");
@@ -1382,11 +1383,11 @@
     const s = showSheet(`
       ${head(esc(p.name), `<span class="again">${IC_AGAIN}${n}회째 방문</span><span>${f.editId ? "이 방문 기록 수정" : "내 기록에 방문 추가"}</span>`)}
       <p class="revisit-note">새 기록이 따로 생기지 않고 <b>내 기록에 더해져요</b>. 방문 횟수가 ${n}회로 올라가고, 적은 메뉴는 내 추천 메뉴에 추가돼요. 아무것도 안 적고 <b>간 기록만 남기기</b>를 눌러도 돼요.</p>
-      <div class="field"><label class="flabel" for="rmenu">오늘 먹은 메뉴 <span class="opt">선택 · 내 추천 메뉴에 추가돼요</span></label><input class="input" id="rmenu" maxlength="40" placeholder="${esc(known[0] || "제육 정식")}" value="${esc(f.menu)}" />
+      <div class="field"><label class="flabel" for="rmenu">오늘 먹은 메뉴 <span class="opt">선택 · 내 추천 메뉴에 추가돼요</span></label><input class="input" id="rmenu" maxlength="40" placeholder="${esc(known[0] || "제육 정식")}" value="${esc(f.menu)}" />
         ${known.length ? `<div class="chips sub quick-menus" aria-label="이 가게에서 멤버들이 먹은 메뉴">${known.map((m) => `<button class="chip" data-qm="${esc(m)}" aria-pressed="${!!f.menu && menuKey(f.menu) === menuKey(m)}">${esc(m)}</button>`).join("")}</div>` : ""}</div>
-      <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
-      <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택 · 적으면 내 기록 메모가 이걸로 바뀌어요</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="이번엔 곱빼기로 · 새 메뉴 나왔어요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
-      <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 가장 최근 사진이 목록 대표 사진이 돼요</span></span>
+      <div class="field"><span class="flabel">추천 포인트 <span class="opt">선택 · 최대 ${MAX_PICKS}개</span></span><div class="chips wrap">${Object.entries(PICKS).map(([k, l]) => `<button class="chip" data-pick="${k}" aria-pressed="${f.picks.includes(k)}">${l}</button>`).join("")}</div></div>
+      <div class="field"><label class="flabel" for="rmemo">한 줄 메모 <span class="opt">선택 · 적으면 내 기록 메모가 이걸로 바뀌어요</span></label><textarea class="input memo" id="rmemo" maxlength="100" rows="2" placeholder="이번엔 곱빼기로 · 새 메뉴 나왔어요">${esc(f.memo)}</textarea><div class="memo-n" id="rmemoN">${f.memo.length}/100</div></div>
+      <div class="field"><span class="flabel">사진 <span class="opt">선택 · 최대 3장 · 가장 최근 사진이 목록 대표 사진이 돼요</span></span>
         <div class="photo-pick">${f.photos.map((ph, i) => `<div class="ph-item"><img src="${ph.thumb}" alt="" /><button type="button" data-ph-del="${i}" aria-label="사진 빼기">✕</button></div>`).join("")}
           ${f.photos.length < 3 ? `<label class="ph-add"${f.busy ? ' aria-busy="true"' : ""}><input type="file" accept="image/*" multiple hidden id="rphoto" /><span>${f.busy ? "…" : "＋"}</span><small>${f.busy ? "준비 중" : "사진 추가"}</small></label>` : ""}</div>
         <p class="err" id="phErr"></p></div>
@@ -1519,7 +1520,7 @@
       const avoidChips = used.map((c) => `<button class="chip" data-avoid="${c}" aria-pressed="${rl.avoid.includes(c)}">${catLabel(c)}</button>`).join("");
       const s = showSheet(`
         ${head("오늘 뭐 먹지?", `<span>먹기 싫은 것만 빼고 돌려요</span>`)}
-        <div class="field"><span class="flabel">먹기 싫은 것 <span class="opt">여러 개 선택 · 고르면 후보에서 빠져요</span></span><div class="chips neg rl-cats">${avoidChips}</div></div>
+        <div class="field"><span class="flabel">먹기 싫은 것 <span class="opt">여러 개 선택 · 고르면 후보에서 빠져요</span></span><div class="chips neg rl-cats">${avoidChips}</div></div>
         <div class="wheel" aria-hidden="true"><div class="wheel-band"></div><div class="wheel-track" id="track">${(list.length ? list : [{ p: { name: "후보가 없어요" } }]).slice(0, 5).map((x) => `<div class="wheel-item">${esc(x.p.name)}</div>`).join("")}</div></div>
         <p class="count">${list.length ? `후보 ${list.length}곳${list.length === 1 ? " · 한 곳뿐이에요" : ""}` : "후보가 없어요 · 먹기 싫은 것을 조금 풀어보세요"}</p>
         <div id="rlResult"></div>
@@ -1673,7 +1674,8 @@
     const st = H.status(h), di = H.dayIdx(new Date());
     const lunch = di < 5 ? H.lunchOK(h, di, minsOf(LUNCH.start), minsOf(LUNCH.end)) : null;
     const src = h.src === "osm" ? "오픈스트리트맵 정보 · © OpenStreetMap 기여자" : `${h.by ? `${esc(h.by)}님이 입력` : "멤버가 입력"}${tsMs(h.at) ? ` · ${md(tsMs(h.at))}` : ""}`;
-    return `<details class="hours-box"><summary><span class="hs hs-${st.kind}">${st.text}</span>${st.kind === "off" ? "" : `<span class="hours-today">오늘 ${H.pretty(h[H.DAYS[di]])}</span>`}</summary>
+    // 요약 줄: 상태와 오늘 시간이 한 줄에 안 들어가면 오늘 시간이 통째로 다음 줄로 (말줄임 없이)
+    return `<details class="hours-box"><summary><span class="hours-sum"><span class="hs hs-${st.kind}">${st.text}</span>${st.kind === "off" ? "" : `<span class="hours-today">오늘 ${H.pretty(h[H.DAYS[di]])}</span>`}</span></summary>
       <ol class="hours-week">${H.DAYS.map((d, i) => `<li${i === di ? ' class="today"' : ""}><span>${H.KO[i]}</span><span>${H.pretty(h[d])}</span></li>`).join("")}</ol>
       ${h.note ? `<p class="hours-note">${esc(h.note)}</p>` : ""}
       <p class="hours-src">${src}${isGuest() ? "" : ` · ${edit("수정")}`}</p></details>
@@ -1724,12 +1726,12 @@
     const tIn = (k, v, i) => `<input class="input time" type="time" step="300" data-t="${k}"${i != null ? ` data-i="${i}"` : ""} value="${esc(v || "")}" aria-label="${k === "o" ? "여는 시간" : k === "c" ? "닫는 시간" : k === "bo" ? "브레이크 시작" : "브레이크 끝"}" />`;
     const render = () => {
       const s = showSheet(`
-        ${head("영업시간", `<span>${esc(p.name)} · 모든 멤버에게 바로 보여요</span>`)}
+        ${head("영업시간", `<span>${esc(p.name)}</span>`)}
         <div class="seg" role="group" aria-label="입력 방식" style="margin-top:14px"><button data-hm="same" aria-pressed="${f.mode === "same"}">매일 같아요</button><button data-hm="each" aria-pressed="${f.mode === "each"}">요일마다 달라요</button></div>
         ${f.mode === "same" ? `<div class="field"><span class="flabel">영업 시간</span><div class="trow">${tIn("o", f.o)}<span class="tsep">~</span>${tIn("c", f.c)}</div></div>
           <div class="field"><span class="flabel">쉬는 날 <span class="opt">없으면 비워 두세요</span></span><div class="chips">${H.KO.map((k, i) => `<button class="chip" data-off="${i}" aria-pressed="${f.off.has(i)}">${k}</button>`).join("")}</div></div>`
         : `<div class="field"><span class="flabel">요일별 영업 시간</span><div class="hours-each">${H.KO.map((k, i) => { const e = f.each[i]; return `<div class="trow"><span class="dl">${k}</span>${e.off ? `<span class="off-t">쉬는 날</span>` : `${tIn("o", e.o, i)}<span class="tsep">~</span>${tIn("c", e.c, i)}`}<button class="chip sm" data-eoff="${i}" aria-pressed="${e.off}">휴무</button></div>`; }).join("")}</div></div>`}
-        <div class="field"><span class="flabel">브레이크타임 <span class="opt">선택 · 영업하는 날 모두</span></span><div class="trow">${tIn("bo", f.bo)}<span class="tsep">~</span>${tIn("bc", f.bc)}${f.bo || f.bc ? `<button class="link" data-brk-clear>없음</button>` : ""}</div></div>
+        <div class="field"><span class="flabel">브레이크타임 <span class="opt">선택 · 영업하는 날 모두</span></span><div class="trow">${tIn("bo", f.bo)}<span class="tsep">~</span>${tIn("bc", f.bc)}${f.bo || f.bc ? `<button class="link" data-brk-clear>없음</button>` : ""}</div></div>
         <div class="field"><label class="flabel" for="hNote">메모 <span class="opt">선택</span></label><input class="input" id="hNote" maxlength="40" placeholder="예: 라스트오더 20:30 · 공휴일 휴무" value="${esc(f.note)}" /></div>
         <p class="err" id="hErr"></p>
         <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="hSave">저장</button><button class="btn btn-plain btn-block" id="hBack">취소</button></div>
