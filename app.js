@@ -505,7 +505,7 @@
       const el = document.createElement("div");
       el.className = ["pin", fresh && "wish", anyFilter() && !passes(st, p) && state.selected !== p.id && "hide", state.selected === p.id && "on"].filter(Boolean).join(" ");
       // 핀에는 별점을 쓰지 않음 (10/22, v69) — 이모지만, 아직 아무도 안 간 곳은 찜한 멤버 수만
-      const label = fresh && st.wish.length ? ` <span class="pin-n">♡${st.wish.length}</span>` : "";
+      const label = fresh && st.wish.length ? `<span class="pin-n">♡${st.wish.length}</span>` : "";
       el.innerHTML = `<div class="pin-b"><span class="pin-e">${emojiFor(p)}</span>${label}</div><div class="pin-t"></div><div class="pin-l">${esc(p.name)}</div>`;
       if (!popped.has(p.id)) { popped.add(p.id); el.classList.add("pop"); el.style.setProperty("--d", `${Math.min(order++ * 35, 700)}ms`); }
       el.dataset.pid = p.id;   // 클릭은 initMap의 pinTap에서 처리 (PC 마우스에서도 확실히 열리게)

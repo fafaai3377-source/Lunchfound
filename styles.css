@@ -144,11 +144,12 @@ input { font: inherit; color: inherit; }
 /* ───────── 지도 핀 ───────── */
 .pin { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; filter: drop-shadow(0 1px 3px rgba(0,0,0,.2)); }
 /* 핀 (v69): 흰색에 가까운 포인트 색 틴트 + 얇은 테두리 + 이모지만. 고른 핀만 진한 포인트 색 */
-.pin-b { height: 34px; min-width: 34px; padding: 0 8px; border-radius: 17px; background: var(--pin-bg); color: var(--accent-map); box-shadow: inset 0 0 0 1.5px rgba(var(--accent-map-rgb), .32); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 2px; white-space: nowrap; letter-spacing: -0.01em; transition: transform .15s; }
+.pin-b { position: relative; width: 34px; height: 34px; padding: 0; border-radius: 50%; background: var(--pin-bg); color: var(--accent-map); box-shadow: inset 0 0 0 1.5px rgba(var(--accent-map-rgb), .32); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 2px; white-space: nowrap; letter-spacing: -0.01em; transition: transform .15s; }
 .pin-t { width: 10px; height: 6px; background: var(--pin-bg); clip-path: polygon(0 0, 100% 0, 50% 100%); margin-top: -1px; }
-.pin-e { font-size: 18px; line-height: 1; }
-.pin-n { font-size: 12px; }
-.pin.wish .pin-b { background: #fff; box-shadow: none; padding: 0 7px; }
+.pin-e { font-size: 16.2px; line-height: 1; }   /* 이모지 90% (18 → 16.2, v70) */
+/* 아직 아무도 안 간 곳의 찜 수 "♡2": 동그라미 오른쪽 위 작은 배지 */
+.pin-n { position: absolute; top: -5px; right: -9px; min-width: 18px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent-map); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; box-shadow: 0 0 0 1.5px #fff; }
+.pin.wish .pin-b { background: #fff; box-shadow: none; }
 .pin.wish .pin-t { background: #fff; }
 .pin-l { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 12px; font-weight: 600; color: #1D1D1F; white-space: nowrap; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; filter: none; }
 .pin.dim { opacity: .3; }
@@ -281,7 +282,8 @@ input { font: inherit; color: inherit; }
 
 /* 멀리 볼 때는 이름표 숨김 (지도 앱처럼) */
 .map.far .pin-l { display: none; }
-.map.far .pin-b { height: 26px; min-width: 26px; padding: 0 6px; }
+.map.far .pin-b { width: 26px; height: 26px; }
+.map.far .pin-e { font-size: 13.5px; }
 .map.far .pin .pin-n, .map.far .pin-b > :not(.pin-e) { display: none; }
 
 /* ───────── 오늘 약속 (식사조인) ───────── */
