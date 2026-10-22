@@ -15,9 +15,9 @@
 
 | 토큰 | 값 | 쓰는 곳 |
 |---|---|---|
-| accent | `#007AFF` (레드 선택 시 `#DA2C23`) | 핀, 도보 경로선, 주요 버튼, "오늘 뭐 먹지?" (유일한 강조색) |
+| accent | `#DA2C23` 기본 (블루 `#007AFF`, 흑백 `#1D1D1F`) | 핀, 도보 경로선, 주요 버튼, "오늘 뭐 먹지?" (유일한 강조색) |
 | star | `#FFB800` | 별점 별 |
-| accent-press | `#0062CC` (레드 선택 시 `#B8241C`) | 주요 버튼 눌렀을 때 |
+| accent-press | `#B8241C` 기본 (블루 `#0062CC`, 흑백 `#000000`) | 주요 버튼 눌렀을 때 |
 | ink | `#1D1D1F` | 본문, 사옥 핀, 선택된 칩 |
 | ink-2 | `#6E6E73` | 보조 글자 |
 | ink-3 | `#8E8E93` | 힌트, 시간 |
@@ -95,4 +95,4 @@
 | 파비콘 | `icons/favicon.svg` (벡터, 원본 아이콘 실측 좌표) + 32px PNG + ICO |
 | 스플래시 | 버건디 바탕 + 흰 로고, 0.9초 뒤 0.32초 페이드 |
 
-UI 안의 버튼·경로 강조색(`--accent`)은 지도 앱 관례를 따른 파란색이 기본이다. 10/22(v62)부터 내 정보 → **포인트 색**에서 블루 / 레드를 고를 수 있다. 레드를 고르면 `<html data-accent="red">`가 붙고 `--accent #DA2C23`, `--accent-press #B8241C`, `--accent-rgb 218, 44, 35`, `--accent-tint`, `--accent-soft #F5ADA8`(도보 경로 시작색)로 바뀐다. 기기마다 `localStorage`의 `lunchfound-accent`에 저장되고, index.html 앞부분에서 그리기 전에 적용한다.
+UI 안의 버튼·경로 강조색(`--accent`, 포인트 색)은 10/22(v64)부터 **레드가 기본**이고, 내 정보 → **포인트 색**에서 레드 / 블루 / 흑백을 고를 수 있다. `<html data-accent="red|blue|mono">`로 `--accent`, `--accent-press`, `--accent-rgb`, `--accent-tint`, `--accent-soft`(도보 경로 시작색), `--on-accent`(버튼 글자), `--accent-map`(늘 밝은 지도 위 핀·경로)이 바뀐다. 흑백 + 다크 모드에서는 버튼이 흰 바탕·검정 글자, 지도 위는 검정. 기기마다 `localStorage`의 `lunchfound-accent`에 저장되고, index.html 앞부분에서 그리기 전에 적용한다.

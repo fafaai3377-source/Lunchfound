@@ -2147,14 +2147,13 @@
   const themeSeg = () => `<div class="seg" id="themeSeg" role="group" aria-label="화면 모드">${Object.entries(THEMES).map(([k, v]) => `<button data-th="${k}" aria-pressed="${themePref() === k}">${v}</button>`).join("")}</div>`;
   const bindThemeSeg = (root) => $$("[data-th]", root).forEach((b) => (b.onclick = () => { applyTheme(b.dataset.th); $$("[data-th]", root).forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
 
-  // ───────── 포인트 색 (블루 / 레드) — 버튼·핀·경로·강조 글자 등 파랑이 쓰이던 곳 전부 (10/22, v62) ─────────
-  // 색 값은 styles.css의 --accent 변수들, 고르면 <html data-accent="red"> 하나로 바뀜. 이 기기에만 저장 (화면 모드와 같은 방식)
-  const ACCENTS = { blue: ["블루", "#007AFF"], red: ["레드", "#DA2C23"] };
-  const accentPref = () => { try { return localStorage.getItem("lunchfound-accent") === "red" ? "red" : "blue"; } catch { return "blue"; } };
+  // ───────── 포인트 색 (레드 / 블루 / 흑백) — 버튼·핀·경로·강조 글자 등 강조색이 쓰이는 곳 전부 (10/22, v62 → v64 세 가지 + 기본 레드) ─────────
+  // 색 값은 styles.css의 --accent 변수들, 고르면 <html data-accent="red|blue|mono"> 하나로 바뀜. 이 기기에만 저장 (화면 모드와 같은 방식)
+  const ACCENTS = { red: ["레드", "#DA2C23"], blue: ["블루", "#007AFF"], mono: ["흑백", "linear-gradient(135deg, #1D1D1F 50%, #FFFFFF 50%)"] };
+  const accentPref = () => { try { const a = localStorage.getItem("lunchfound-accent"); return ACCENTS[a] ? a : "red"; } catch { return "red"; } };
   function applyAccent(pref) {
     try { localStorage.setItem("lunchfound-accent", pref); } catch {}
-    if (pref === "red") document.documentElement.setAttribute("data-accent", "red");
-    else document.documentElement.removeAttribute("data-accent");
+    document.documentElement.setAttribute("data-accent", pref);
     document.dispatchEvent(new Event("accentchange"));   // 지도에 그려진 도보 경로 색도 바로 바꿈
   }
   const accentSeg = () => `<div class="seg" id="accentSeg" role="group" aria-label="포인트 색">${Object.entries(ACCENTS).map(([k, [v, c]]) => `<button data-ac="${k}" aria-pressed="${accentPref() === k}"><span class="sw" style="background:${c}"></span>${v}</button>`).join("")}</div>`;

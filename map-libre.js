@@ -209,11 +209,11 @@
   // ───────── 도보 경로: 모션그래픽처럼 천천히 그려지는 그라데이션 선 ─────────
   // 1) 카메라가 경로로 부드럽게 이동 → 2) 사옥에서 가게까지 거리 기준으로 일정하게, ease-in-out으로 그림
   // 색: 사옥(연한 포인트 색) → 가게(진한 포인트 색) 그라데이션 + 뒤에 은은한 빛 번짐 → 3) 도착지에 물결 한 번
-  // 색은 styles.css의 포인트 색 변수에서 읽음 (블루: #9FD0FF → #007AFF, 레드: #F5ADA8 → #DA2C23). 내 정보에서 바꾸면 바로 다시 칠함
-  let C_FROM = "#9FD0FF", C_TO = "#007AFF", NONE = "rgba(0,122,255,0)";
+  // 색은 styles.css의 포인트 색 변수에서 읽음 (레드 #F5ADA8 → #DA2C23, 블루 #9FD0FF → #007AFF, 흑백 #B4B4B9 → #1D1D1F). 내 정보에서 바꾸면 바로 다시 칠함
+  let C_FROM = "#F5ADA8", C_TO = "#DA2C23", NONE = "rgba(218,44,35,0)";
   const readAccent = () => {
     const cs = getComputedStyle(document.documentElement), v = (k, d) => cs.getPropertyValue(k).trim() || d;
-    C_FROM = v("--accent-soft", "#9FD0FF"); C_TO = v("--accent", "#007AFF"); NONE = `rgba(${v("--accent-rgb", "0, 122, 255")}, 0)`;
+    C_FROM = v("--accent-soft", "#F5ADA8"); C_TO = v("--accent-map", "#DA2C23"); NONE = `rgba(${v("--accent-map-rgb", "218, 44, 35")}, 0)`;
   };
   let routeP = 0;
   document.addEventListener("accentchange", () => {

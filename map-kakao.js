@@ -67,7 +67,7 @@ window.MapKit = (function () {
     const pts = path.map(([a, o]) => new kakao.maps.LatLng(a, o));
     lines = [
       new kakao.maps.Polyline({ path: pts, strokeWeight: 9, strokeColor: "#FFFFFF", strokeOpacity: 1, strokeStyle: "solid" }),
-      new kakao.maps.Polyline({ path: pts, strokeWeight: 5, strokeColor: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#007AFF", strokeOpacity: 1, strokeStyle: "solid" }),
+      new kakao.maps.Polyline({ path: pts, strokeWeight: 5, strokeColor: getComputedStyle(document.documentElement).getPropertyValue("--accent-map").trim() || "#DA2C23", strokeOpacity: 1, strokeStyle: "solid" }),
     ];
     lines.forEach((l) => l.setMap(map));
     // 경로가 사옥에서부터 그려지는 모션 (0.6초, ease-out)
