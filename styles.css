@@ -156,8 +156,8 @@ input { font: inherit; color: inherit; }
 .pin.on .pin-b { transform: scale(1.18); background: var(--accent-map); color: #fff; box-shadow: none; }
 .pin.on .pin-t { background: var(--accent-map); }
 .pin.on { z-index: 9; }
-.office { display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)); }
-.office .pin-b { width: auto; background: #3A3A3C; color: #fff; padding: 0 11px; height: 30px; border-radius: 15px; font-size: 13px; letter-spacing: 0; gap: 5px; }   /* 글자 길이에 맞는 알약 ("f/F HAUS") */
+.office { display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)); z-index: 5; }   /* 가게 핀보다 위, 고른 핀(9)보다 아래 */
+.office .pin-b { width: auto; background: #3A3A3C; color: #fff; padding: 0 11px; height: 30px; border-radius: 15px; font-size: 13px; letter-spacing: 0; gap: 4px; }   /* 글자 길이에 맞는 알약 ("f/F HAUS") */
 .office .pin-t { background: #3A3A3C; }
 .office .pin-b, .ipin .pin-b { box-shadow: none; }   /* 사옥 핀·첫 화면 그림 핀은 테두리 없이 */
 .ghost { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-map); border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(var(--accent-map-rgb), .14), 0 2px 6px rgba(0,0,0,.3); }
@@ -285,6 +285,10 @@ input { font: inherit; color: inherit; }
 .map.far .pin-b { width: 26px; height: 26px; }
 .map.far .pin-e { font-size: 13.5px; }
 .map.far .pin .pin-n, .map.far .pin-b > :not(.pin-e) { display: none; }
+/* 사옥 핀: 멀리 보면 "f/F"만, 다른 핀처럼 작게 (v74) */
+.map.far .office .pin-b { width: auto; height: 26px; padding: 0 9px; border-radius: 13px; font-size: 12px; }
+.map.far .office .pin-b > .of-a { display: inline; }
+.map.far .office .pin-b > .of-b { display: none; }
 
 /* ───────── 오늘 약속 (식사조인) ───────── */
 .meet-btn { position: relative; height: 44px; padding: 0 14px; border-radius: var(--r-pill); font-size: 15px; font-weight: 600; color: var(--ink); box-shadow: var(--shadow-float); white-space: nowrap; }

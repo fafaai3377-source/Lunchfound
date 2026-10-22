@@ -393,7 +393,9 @@
     if (MapKit.attribution) { const a = $("#attrib"); a.textContent = MapKit.attribution; a.hidden = false; }
     const el = document.createElement("div");
     el.className = "office";
-    el.innerHTML = `<div class="pin-b">${esc(C.office.name)}</div><div class="pin-t"></div>`;   // ◉ 표시는 10/22(v71)에 뺌
+    // "f/F HAUS" → 첫 낱말(f/F)과 나머지(HAUS)를 나눠서, 지도를 멀리 보면 f/F만 (10/22 v74). ◉ 표시는 v71에 뺌
+    const [ofA, ...ofB] = String(C.office.name).split(" ");
+    el.innerHTML = `<div class="pin-b"><span class="of-a">${esc(ofA)}</span>${ofB.length ? `<span class="of-b">${esc(ofB.join(" "))}</span>` : ""}</div><div class="pin-t"></div>`;
     MapKit.add(el, C.office.lat, C.office.lng, "bottom");
     // 핀 누르기 → 가게 정보 열기. 마우스로 누르면 지도 라이브러리가 "끌기"로 먼저 잡아채서 click이 핀에 안 오므로,
     // 누른 곳과 뗀 곳의 핀을 직접 찾아 같은 핀이고 거의 안 움직였으면 연다.
