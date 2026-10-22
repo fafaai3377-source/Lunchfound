@@ -1060,3 +1060,24 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .hours-each .dl { font-weight: 600; }
 .hours-each .off-t { grid-column: 2 / 5; color: var(--ink-3); font-size: 14px; padding-left: 6px; }
 .chip.sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
+
+/* ═════════ 내 위치 (10/22, v67) — 포인트 색 점 · 퍼지는 물결 2겹 · 정확도 원 · 보는 방향 부채꼴 ═════════ */
+.me-dot { position: relative; width: 22px; height: 22px; pointer-events: none; --dir: 0deg; --acc: 0px; }
+.me-dot > i { position: absolute; left: 50%; top: 50%; border-radius: 50%; }
+.me-core { width: 20px; height: 20px; margin: -10px 0 0 -10px; z-index: 3; border: 3px solid #fff;
+  background: var(--accent-map) radial-gradient(circle at 35% 30%, rgba(255,255,255,.45), rgba(255,255,255,0) 62%);
+  box-shadow: 0 1px 5px rgba(0,0,0,.32); animation: meBreath 2.4s ease-in-out infinite; }
+.me-pulse { width: 20px; height: 20px; margin: -10px 0 0 -10px; z-index: 2;
+  background: radial-gradient(circle, rgba(var(--accent-map-rgb), .5) 0%, rgba(var(--accent-map-rgb), .22) 50%, rgba(var(--accent-map-rgb), 0) 71%);
+  animation: mePulse 2.4s cubic-bezier(.2, .7, .3, 1) infinite; }
+.me-pulse.d2 { animation-delay: 1.2s; }
+.me-acc { width: var(--acc); height: var(--acc); margin: calc(var(--acc) / -2) 0 0 calc(var(--acc) / -2); z-index: 0;
+  background: rgba(var(--accent-map-rgb), .08); box-shadow: inset 0 0 0 1px rgba(var(--accent-map-rgb), .22); transition: width .4s, height .4s, margin .4s; }
+.me-beam { width: 116px; height: 116px; margin: -58px 0 0 -58px; z-index: 1; opacity: 0;
+  background: conic-gradient(from -40deg, rgba(var(--accent-map-rgb), 0) 0deg, rgba(var(--accent-map-rgb), .62) 20deg, rgba(var(--accent-map-rgb), .62) 60deg, rgba(var(--accent-map-rgb), 0) 80deg, transparent 80deg);
+  -webkit-mask: radial-gradient(circle closest-side, #000 22%, rgba(0,0,0,.6) 58%, transparent 100%); mask: radial-gradient(circle closest-side, #000 22%, rgba(0,0,0,.6) 58%, transparent 100%);
+  transform: rotate(var(--dir)); transition: transform 120ms linear, opacity .3s; }
+.me-dot.has-dir .me-beam { opacity: 1; }
+@keyframes mePulse { 0% { transform: scale(1); opacity: .95; } 100% { transform: scale(4.6); opacity: 0; } }
+@keyframes meBreath { 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .me-pulse, .me-core { animation: none; } .me-pulse.d2 { display: none; } }

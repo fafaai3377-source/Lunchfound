@@ -387,6 +387,7 @@
     $("#map .map-msg")?.remove();
     document.documentElement.classList.remove("lite", "map-off");
     state.mapReady = true;
+    if (me.pos) MapKit.setMe?.(me.pos.lat, me.pos.lng, me.pos.acc);
     applyMapMode(savedMapMode());   // 지난번에 고른 지도 종류(그래픽·일반·위성)로
     homeView(true);   // 처음 열 때도 사옥이 보이는 영역 가운데
     if (MapKit.attribution) { const a = $("#attrib"); a.textContent = MapKit.attribution; a.hidden = false; }
@@ -1606,6 +1607,58 @@
     render();
   }
 
+  // ───────── 내 위치 (10/22, v67) — 지도에 포인트 색 점 + 물결 + 휴대폰이 보는 방향 ─────────
+  // 위치·방향은 이 기기 화면에만 쓰고 어디에도 저장·전송하지 않아요. 한 번 허용하면 다음부터는 앱을 열 때 바로 보여요(방향은 아이폰이면 버튼을 눌러야)
+  const me = { watch: null, pos: null, on: false, center: false, dir: null, dirOn: false, warned: false };
+  const meOffY = () => { if (desk()) return 0; const top = $("#filterbar")?.getBoundingClientRect().bottom || 100, pr = $("#panel")?.getBoundingClientRect(); return Math.round((top - (pr ? Math.max(0, innerHeight - pr.top) : 0)) / 2); };
+  function watchMe() {
+    if (me.watch != null || !("geolocation" in navigator)) return;
+    me.watch = navigator.geolocation.watchPosition((p) => {
+      me.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+      if (state.mapReady) MapKit.setMe?.(me.pos.lat, me.pos.lng, me.pos.acc);
+      $("#zme")?.classList.add("on");
+      if (me.center && state.mapReady) { me.center = false; MapKit.centerOn?.(me.pos.lat, me.pos.lng, meOffY()); }
+    }, (e) => {
+      if (e.code === 1) {   // 권한 거부
+        stopLocate();
+        toast(isIOS() ? "위치 권한이 꺼져 있어요 · 설정 → 개인정보 보호 → 위치 서비스에서 켜 주세요" : "위치 권한이 꺼져 있어요 · 주소창 왼쪽 아이콘에서 위치를 허용해 주세요");
+      } else if (!me.pos && !me.warned) { me.warned = true; toast("지금 위치를 찾지 못했어요 · 잠시 뒤 다시 눌러 주세요"); }
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  }
+  function startLocate(center) {
+    if (!("geolocation" in navigator)) return toast("이 브라우저는 위치를 지원하지 않아요");
+    me.on = true; me.warned = false;
+    if (center) { if (me.pos && state.mapReady) MapKit.centerOn?.(me.pos.lat, me.pos.lng, meOffY()); else { me.center = true; toast("내 위치를 찾는 중이에요"); } }
+    watchMe();
+  }
+  function stopLocate() {
+    if (me.watch != null) navigator.geolocation.clearWatch(me.watch);
+    me.watch = null; me.pos = null; me.on = false; me.center = false;
+    MapKit.clearMe?.(); $("#zme")?.classList.remove("on"); stopHeading();
+  }
+  // 휴대폰이 보는 방향: 아이폰 webkitCompassHeading, 안드로이드 deviceorientationabsolute(360 - alpha). 가까운 쪽으로 돌고 살짝 부드럽게
+  function onOrient(e) {
+    let h = typeof e.webkitCompassHeading === "number" ? e.webkitCompassHeading : e.absolute && typeof e.alpha === "number" ? 360 - e.alpha : null;
+    if (h == null || Number.isNaN(h)) return;
+    h = (h + (screen.orientation?.angle ?? window.orientation ?? 0) + 360) % 360;
+    if (me.dir == null) me.dir = h; else me.dir += ((((h - me.dir) % 360) + 540) % 360 - 180) * 0.35;
+    MapKit.setHeading?.(me.dir);
+  }
+  function startHeading() {
+    if (me.dirOn || typeof DeviceOrientationEvent === "undefined") return;
+    const on = (type) => { addEventListener(type, onOrient); me.dirOn = true; };
+    if (typeof DeviceOrientationEvent.requestPermission === "function") DeviceOrientationEvent.requestPermission().then((r) => r === "granted" && on("deviceorientation")).catch(() => {});
+    else on("ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation");
+  }
+  function stopHeading() { removeEventListener("deviceorientation", onOrient); removeEventListener("deviceorientationabsolute", onOrient); me.dirOn = false; me.dir = null; MapKit.setHeading?.(null); }
+  // 이미 허용한 기기면 앱을 열 때 바로 (안드로이드는 방향도). 화면을 떠나 있는 동안은 위치를 쉬어서 배터리 아끼기
+  navigator.permissions?.query?.({ name: "geolocation" }).then((st) => { if (st.state === "granted") { startLocate(false); if (typeof window.DeviceOrientationEvent?.requestPermission !== "function") startHeading(); } }).catch(() => {});
+  document.addEventListener("visibilitychange", () => {
+    if (!me.on) return;
+    if (document.hidden) { if (me.watch != null) navigator.geolocation.clearWatch(me.watch); me.watch = null; }
+    else watchMe();
+  });
+
   // ───────── 영업시간 (10/22, v66) — 멤버가 입력 + 오픈스트리트맵에 있으면 자동으로 (hours.js) ─────────
   const tsMs = (x) => (typeof x === "number" ? x : x?.toMillis?.() ?? (x?._seconds ? x._seconds * 1000 : x?.seconds ? x.seconds * 1000 : 0));
   // 정보 카드 한 줄: " · 영업 중" 처럼 짧게
@@ -2289,6 +2342,7 @@
     $("#zin").onclick = () => MapKit.zoom(1);
     $("#zout").onclick = () => MapKit.zoom(-1);
     $("#zhome").onclick = () => homeView();
+    $("#zme").onclick = () => { startHeading(); startLocate(true); };   // 방향 권한(아이폰)은 누른 순간에 물어야 해서 먼저
     // 앱 화면·지도는 스크롤되면 안 됨: 브라우저가 포커스 때문에 밀어도 즉시 제자리로 (overflow: clip 미지원 브라우저 대비)
     ["#app", "#map"].forEach((s) => { const el = $(s); el.addEventListener("scroll", () => { if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; } }); });
     // 지도를 움직이거나 휠로 확대하면 정보 카드 숨김
