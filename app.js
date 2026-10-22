@@ -2026,8 +2026,8 @@
       <div class="field"><span class="flabel">포인트 색</span>${accentSeg()}</div>
       ${isGuest() ? "" : `<div class="field"><span class="flabel">알림</span>${pushCard()}</div>`}
       <div class="stack" style="margin-top:18px">
-        <button class="btn btn-plain btn-block" id="guideBtn">🧭 사용 방법 다시 보기</button>
-        <button class="btn btn-plain btn-block" id="installBtn">📲 앱으로 설치 (홈 화면에 추가)</button>
+        <button class="btn btn-plain btn-block" id="guideBtn">사용 방법 다시 보기</button>
+        <button class="btn btn-plain btn-block" id="installBtn">앱으로 설치 (홈 화면에 추가)</button>
         ${state.store.demo ? `<div class="h3" style="margin-top:14px">알림 미리보기</div><div class="btns"><button class="btn btn-plain" id="pvPopular">12시 인기 장소</button><button class="btn btn-plain" id="pvRecord">기록 요청</button></div>
         <button class="btn btn-plain btn-block" id="pvIntro">첫 화면 소개 다시 보기</button>` : ""}
         ${state.store.demo ? `<button class="btn btn-plain btn-block" id="switchMe">다른 멤버로 보기</button><button class="btn btn-secondary btn-block" id="resetDemo">미리보기 데이터 처음으로</button>` : `<button class="btn btn-plain btn-block" id="logout">로그아웃</button>`}
