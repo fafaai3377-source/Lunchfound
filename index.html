@@ -21,12 +21,15 @@
   <!-- 상단 상태바 색: 스플래시 동안만 버건디, 그 뒤엔 화면 배경색과 같게 (app.js applyTheme) -->
   <meta name="theme-color" content="#DA2C23" />
   <meta name="color-scheme" content="light dark" />
-  <!-- 화면 모드: 라이트 / 다크 / 기기 설정 (내 정보·로그인 화면에서 선택, 기본은 라이트). 그리기 전에 적용해서 깜빡임 없음 -->
+  <!-- 화면 모드: 라이트 / 다크 / 기기 설정 (내 정보·로그인 화면에서 선택, 기본은 라이트) + 포인트 색 블루/레드. 그리기 전에 적용해서 깜빡임 없음 -->
   <script>
     (function () {
       var t = "light"; try { t = localStorage.getItem("lunchfound-theme") || "light"; } catch (e) {}
       var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      // 포인트 색: 블루(기본) / 레드 (내 정보에서 선택, 이 기기에 저장)
+      var a = "blue"; try { a = localStorage.getItem("lunchfound-accent") || "blue"; } catch (e) {}
+      if (a === "red") document.documentElement.setAttribute("data-accent", "red");
     })();
   </script>
   <title>foundeat — 같이 먹고, 같이 찾는 맛집</title>

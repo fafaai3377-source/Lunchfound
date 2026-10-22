@@ -2,7 +2,9 @@
 :root {
   --accent: #007AFF;          /* 지도 앱 블루 (경로·현재 위치·주요 버튼) — 유일한 강조색 */
   --accent-press: #0062CC;
+  --accent-rgb: 0, 122, 255;  /* 반투명 그림자·물결용 (rgba(var(--accent-rgb), .3)) */
   --accent-tint: rgba(0, 122, 255, 0.14);
+  --accent-soft: #9FD0FF;     /* 도보 경로 그라데이션 시작색 (사옥 쪽) */
   --ink: #1D1D1F;
   --ink-2: #6E6E73;
   --ink-3: #8E8E93;
@@ -23,6 +25,8 @@
   :root:not([data-theme="light"]) { --ink: #F5F5F7; --ink-2: #A1A1A6; --ink-3: #8E8E93; --canvas: #1C1C1E; --parchment: #000000; --hair: rgba(84, 84, 88, 0.6); --fill: rgba(118, 118, 128, 0.24); --fill-2: rgba(118, 118, 128, 0.36); --glass: rgba(28, 28, 30, 0.78); }
 }
 :root[data-theme="dark"] { --ink: #F5F5F7; --ink-2: #A1A1A6; --ink-3: #8E8E93; --canvas: #1C1C1E; --parchment: #000000; --hair: rgba(84, 84, 88, 0.6); --fill: rgba(118, 118, 128, 0.24); --fill-2: rgba(118, 118, 128, 0.36); --glass: rgba(28, 28, 30, 0.78); }
+/* 포인트 색: 내 정보에서 블루(기본) / 레드 선택 (10/22, v62). index.html 앞부분에서 data-accent를 정함 → 깜빡임 없음 */
+:root[data-accent="red"] { --accent: #DA2C23; --accent-press: #B8241C; --accent-rgb: 218, 44, 35; --accent-tint: rgba(218, 44, 35, 0.14); --accent-soft: #F5ADA8; }
 
 :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 *, *::before, *::after { box-sizing: border-box; }
@@ -50,6 +54,7 @@ input { font: inherit; color: inherit; }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--canvas); box-shadow: none; }
 .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--fill); border-radius: 9px; padding: 2px; gap: 2px; }
 .seg button { min-height: 32px; border-radius: 7px; font-size: 14px; font-weight: 500; color: var(--ink); }
+.seg .sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }
 .seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--canvas); font-weight: 600; box-shadow: 0 3px 8px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }
 .input { width: 100%; min-height: 44px; padding: 10px 14px; border-radius: var(--r-md); border: 0; background: var(--fill); font-size: 17px; }
 .input:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-tint); background: var(--canvas); }
@@ -87,7 +92,7 @@ input { font: inherit; color: inherit; }
 .topbar > * { pointer-events: auto; }
 .top-row { display: flex; align-items: center; gap: 8px; }
 .brand-pill { height: 44px; padding: 0 16px; border-radius: var(--r-pill); display: flex; align-items: center; font-size: 19px; letter-spacing: -0.02em; font-weight: 300; box-shadow: var(--shadow-float); }
-.roulette-btn { height: 44px; padding: 0 14px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; box-shadow: 0 6px 20px rgba(0, 122, 255, .3); margin-left: auto; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.roulette-btn { height: 44px; padding: 0 14px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; box-shadow: 0 6px 20px rgba(var(--accent-rgb), .3); margin-left: auto; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .me { width: 44px; height: 44px; border-radius: 50%; box-shadow: var(--shadow-float); display: grid; place-items: center; font-weight: 600; font-size: 16px; color: #fff; }
 .filters { display: flex; gap: 8px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; padding-bottom: 6px; }
 .filters::-webkit-scrollbar { display: none; }
@@ -448,7 +453,7 @@ input { font: inherit; color: inherit; }
 .intro-svg.play .bld { animation: fadeUpS 500ms var(--ease-out) forwards; animation-delay: var(--d); }
 .intro-svg.play ~ .ipin { animation: pinIn2 460ms var(--ease-spring) forwards; animation-delay: var(--d); }
 .intro-svg.play .route { animation: draw 650ms var(--ease-out) 1.9s forwards; }
-.intro-svg.play ~ .itarget .pin-b, .intro-svg.play ~ .itarget .pin-t { animation: toBlue 1ms 2.5s forwards; }
+.intro-svg.play ~ .itarget .pin-b, .intro-svg.play ~ .itarget .pin-t { animation: toAccent 1ms 2.5s forwards; }
 .intro-svg.play ~ .itarget .irate { animation: rateIn 300ms var(--ease-out) 2.5s forwards; }
 .intro-svg.play ~ .iwalk { animation: chipUp 360ms var(--ease-spring) 2.6s forwards; }
 .intro-svg.play ~ .ipin.itarget { animation: pinIn2 460ms var(--ease-spring) forwards, targetBump 420ms var(--ease-spring) 2.5s; animation-delay: var(--d), 2.5s; }
@@ -459,7 +464,7 @@ input { font: inherit; color: inherit; }
 @keyframes fadeUpS { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes pinIn2 { from { opacity: 0; transform: translate(-50%, -70%) scale(.9); } to { opacity: 1; transform: translate(-50%, -100%) scale(1); } }
 @keyframes targetBump { 50% { transform: translate(-50%, -100%) scale(1.15); } to { opacity: 1; transform: translate(-50%, -100%) scale(1); } }
-@keyframes toBlue { to { background: var(--accent); color: #fff; } }
+@keyframes toAccent { to { background: var(--accent); color: #fff; } }
 @keyframes rateIn { to { max-width: 34px; opacity: 1; } }
 @keyframes chipUp { to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
@@ -597,8 +602,8 @@ input { font: inherit; color: inherit; }
 @media (min-width: 900px) and (prefers-reduced-motion: reduce) { .sheet, .sheet.closing { animation: none; } }
 
 /* 도보 경로 도착 표시: 가게 위치에서 파란 물결이 한 번 퍼짐 */
-.route-arrive { width: 18px; height: 18px; border-radius: 50%; pointer-events: none; background: rgba(0,122,255,.35); box-shadow: 0 0 0 0 rgba(0,122,255,.45); animation: arrive 1.2s cubic-bezier(.2,.8,.2,1) forwards; }
-@keyframes arrive { 0% { transform: scale(.4); opacity: 1; box-shadow: 0 0 0 0 rgba(0,122,255,.45); } 100% { transform: scale(2.4); opacity: 0; box-shadow: 0 0 0 14px rgba(0,122,255,0); } }
+.route-arrive { width: 18px; height: 18px; border-radius: 50%; pointer-events: none; background: rgba(var(--accent-rgb), .35); box-shadow: 0 0 0 0 rgba(var(--accent-rgb), .45); animation: arrive 1.2s cubic-bezier(.2,.8,.2,1) forwards; }
+@keyframes arrive { 0% { transform: scale(.4); opacity: 1; box-shadow: 0 0 0 0 rgba(var(--accent-rgb), .45); } 100% { transform: scale(2.4); opacity: 0; box-shadow: 0 0 0 14px rgba(var(--accent-rgb), 0); } }
 
 /* ───────── 추천 포인트 · 한 줄 메모 ───────── */
 .chips.wrap { flex-wrap: wrap; }
@@ -753,7 +758,7 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .addr-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 /* 모바일 새 장소 입력창: 찍은 위치가 보이도록 화면의 60%까지만, 나머지는 스크롤 */
 @media (max-width: 899px) { .sheet[data-kind="pin"] { max-height: 60vh; overflow-y: auto; } }
-.addr-ok { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint, rgba(0,122,255,.1)); color: var(--accent); font-size: 13px; font-weight: 600; }
+.addr-ok { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint); color: var(--accent); font-size: 13px; font-weight: 600; }
 
 /* 모바일 목록: 내림(손잡이 + 전체/내 기록 탭) ↔ 올림 두 단계만 */
 @media (max-width: 899px) {
@@ -887,7 +892,7 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 @media (hover: hover) and (pointer: fine) { .mm-opt:not([aria-disabled="true"]):hover .mm-thumb { transform: scale(1.04); } }
 /* 미리보기 썸네일 (그림 파일 없이 색으로) */
 .mm-thumb.graphic { background:
-  radial-gradient(circle at 34px 30px, #007AFF 0 4px, transparent 4.5px),
+  radial-gradient(circle at 34px 30px, var(--accent) 0 4px, transparent 4.5px),
   linear-gradient(118deg, transparent 43%, #fff 43%, #fff 53%, transparent 53%),
   linear-gradient(28deg, transparent 60%, #fff 60%, #fff 67%, transparent 67%),
   linear-gradient(#E9E6E0, #E9E6E0) 8px 8px / 20px 15px no-repeat,
@@ -914,7 +919,7 @@ textarea.input.memo { resize: none; min-height: 64px; line-height: 1.45; padding
 .btn-idle { background: var(--fill); color: var(--ink-2); }
 .save-btn { transition: transform .12s, background-color 220ms var(--ease-out), color 220ms var(--ease-out); }
 .save-btn.lit { animation: saveLit 520ms var(--ease-out); }
-@keyframes saveLit { from { box-shadow: 0 0 0 0 rgba(0, 122, 255, .38); } to { box-shadow: 0 0 0 12px rgba(0, 122, 255, 0); } }
+@keyframes saveLit { from { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), .38); } to { box-shadow: 0 0 0 12px rgba(var(--accent-rgb), 0); } }
 /* 처음 기록: 별점·메모 아래 "아는 것만" 구분 줄 */
 .form-more { display: flex; align-items: center; gap: 8px; margin: 26px 0 -4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .form-more::after { content: ""; flex: 1; height: .5px; background: var(--hair); }

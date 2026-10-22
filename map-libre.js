@@ -205,11 +205,23 @@
     return true;
   }
 
-  // 도보 경로: 흰 테두리 + 파란 선, 사옥에서부터 그려짐
+  // 도보 경로: 흰 테두리 + 포인트 색 선, 사옥에서부터 그려짐
   // ───────── 도보 경로: 모션그래픽처럼 천천히 그려지는 그라데이션 선 ─────────
   // 1) 카메라가 경로로 부드럽게 이동 → 2) 사옥에서 가게까지 거리 기준으로 일정하게, ease-in-out으로 그림
-  // 색: 사옥(연한 하늘색) → 가게(진한 파랑) 그라데이션 + 뒤에 은은한 빛 번짐 → 3) 도착지에 물결 한 번
-  const C_FROM = "#9FD0FF", C_TO = "#007AFF", NONE = "rgba(0,122,255,0)";
+  // 색: 사옥(연한 포인트 색) → 가게(진한 포인트 색) 그라데이션 + 뒤에 은은한 빛 번짐 → 3) 도착지에 물결 한 번
+  // 색은 styles.css의 포인트 색 변수에서 읽음 (블루: #9FD0FF → #007AFF, 레드: #F5ADA8 → #DA2C23). 내 정보에서 바꾸면 바로 다시 칠함
+  let C_FROM = "#9FD0FF", C_TO = "#007AFF", NONE = "rgba(0,122,255,0)";
+  const readAccent = () => {
+    const cs = getComputedStyle(document.documentElement), v = (k, d) => cs.getPropertyValue(k).trim() || d;
+    C_FROM = v("--accent-soft", "#9FD0FF"); C_TO = v("--accent", "#007AFF"); NONE = `rgba(${v("--accent-rgb", "0, 122, 255")}, 0)`;
+  };
+  let routeP = 0;
+  document.addEventListener("accentchange", () => {
+    readAccent();
+    if (!map || !map.getLayer("route-line")) return;
+    map.setPaintProperty("route-line", "line-gradient", grad(routeP, C_FROM, C_TO));
+    map.setPaintProperty("route-glow", "line-gradient", grad(routeP, C_FROM, C_TO));
+  });
   let arrive = null;
   function clearRoute() {
     if (!map) return;
@@ -234,6 +246,7 @@
   function showRoute(path, pad = {}) {
     if (!map) return;
     clearRoute();
+    readAccent(); routeP = 0;
     const coords = path.map(([a, o]) => [o, a]);
     lastCoords = coords;
     if (coords.length < 2) return;
@@ -244,6 +257,7 @@
     map.addLayer({ id: "route-line", type: "line", source: "route", layout: L, paint: { "line-width": 5.5, "line-gradient": grad(0, C_FROM, C_TO) } });
     const set = (p) => {
       if (!map.getLayer("route-line")) return;
+      routeP = p;
       map.setPaintProperty("route-line", "line-gradient", grad(p, C_FROM, C_TO));
       map.setPaintProperty("route-glow", "line-gradient", grad(p, C_FROM, C_TO));
       map.setPaintProperty("route-casing", "line-gradient", grad(p, "#fff", "#fff"));
@@ -260,7 +274,7 @@
       const k = Math.max(0, Math.min(1, (now - t0) / D));
       set(easeInOut(k));
       if (k < 1) { routeAnim = requestAnimationFrame(step); return; }
-      // 도착: 가게 위치에 파란 물결 한 번
+      // 도착: 가게 위치에 포인트 색 물결 한 번
       const el = document.createElement("div"); el.className = "route-arrive";
       arrive = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(coords[coords.length - 1]).addTo(map);
       setTimeout(() => { arrive?.remove(); arrive = null; }, 1400);

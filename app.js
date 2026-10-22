@@ -2023,6 +2023,7 @@
       ${head("내 정보")}
       <div class="list-card" style="background:var(--parchment);margin-top:14px"><div class="member">${avatar(state.user.name)}<div style="flex:1"><div class="nm"><span class="team">${esc(m.team)}</span>${esc(state.user.name)}님</div><div class="rl">${esc(m.role)}</div></div></div></div>
       <div class="field"><span class="flabel">화면 모드</span>${themeSeg()}</div>
+      <div class="field"><span class="flabel">포인트 색</span>${accentSeg()}</div>
       ${isGuest() ? "" : `<div class="field"><span class="flabel">알림</span>${pushCard()}</div>`}
       <div class="stack" style="margin-top:18px">
         <button class="btn btn-plain btn-block" id="guideBtn">🧭 사용 방법 다시 보기</button>
@@ -2035,6 +2036,7 @@
     $("#installBtn", s).onclick = openInstall;
     $("#guideBtn", s).onclick = startGuide;
     bindThemeSeg(s);
+    bindAccentSeg(s);
     if (!isGuest()) bindPushCard(s, openMe);
     const pp = $("#pvPopular", s); if (pp) pp.onclick = () => { closeSheet(); nudgePopular(); };
     const pr2 = $("#pvRecord", s); if (pr2) pr2.onclick = () => { closeSheet(); nudgeRecord(); };
@@ -2144,6 +2146,19 @@
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (themePref() === "system") applyTheme("system"); });
   const themeSeg = () => `<div class="seg" id="themeSeg" role="group" aria-label="화면 모드">${Object.entries(THEMES).map(([k, v]) => `<button data-th="${k}" aria-pressed="${themePref() === k}">${v}</button>`).join("")}</div>`;
   const bindThemeSeg = (root) => $$("[data-th]", root).forEach((b) => (b.onclick = () => { applyTheme(b.dataset.th); $$("[data-th]", root).forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+
+  // ───────── 포인트 색 (블루 / 레드) — 버튼·핀·경로·강조 글자 등 파랑이 쓰이던 곳 전부 (10/22, v62) ─────────
+  // 색 값은 styles.css의 --accent 변수들, 고르면 <html data-accent="red"> 하나로 바뀜. 이 기기에만 저장 (화면 모드와 같은 방식)
+  const ACCENTS = { blue: ["블루", "#007AFF"], red: ["레드", "#DA2C23"] };
+  const accentPref = () => { try { return localStorage.getItem("lunchfound-accent") === "red" ? "red" : "blue"; } catch { return "blue"; } };
+  function applyAccent(pref) {
+    try { localStorage.setItem("lunchfound-accent", pref); } catch {}
+    if (pref === "red") document.documentElement.setAttribute("data-accent", "red");
+    else document.documentElement.removeAttribute("data-accent");
+    document.dispatchEvent(new Event("accentchange"));   // 지도에 그려진 도보 경로 색도 바로 바꿈
+  }
+  const accentSeg = () => `<div class="seg" id="accentSeg" role="group" aria-label="포인트 색">${Object.entries(ACCENTS).map(([k, [v, c]]) => `<button data-ac="${k}" aria-pressed="${accentPref() === k}"><span class="sw" style="background:${c}"></span>${v}</button>`).join("")}</div>`;
+  const bindAccentSeg = (root) => $$("[data-ac]", root).forEach((b) => (b.onclick = () => { applyAccent(b.dataset.ac); $$("[data-ac]", root).forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
 
   // ───────── 기타 ─────────
   let tt;
