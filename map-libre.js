@@ -93,7 +93,9 @@
       });
     } catch (e) { try { m.remove(); } catch {} throw e; }
     map = m;
-    map.touchZoomRotate.disableRotation();
+    // 회전: 모바일에서 두 손가락으로 돌리기 (10/22, v73). 마우스로 돌리기는 그대로 막음. 북쪽 ±7° 안에서 놓으면 북쪽으로 붙음(기본 bearingSnap)
+    map.touchZoomRotate.enableRotation();
+    map.on("rotate", () => { applyHeading(); rotateCb?.(map.getBearing()); });
     // 쓰는 중에 그래픽이 끊기면(다른 탭이 그래픽을 많이 쓰거나 드라이버가 재시작) 지도가 스스로 복구를 시도 — 4초 안에 못 돌아오면 알림
     let lostT = 0;
     map.on("webglcontextlost", () => { clearTimeout(lostT); lostT = setTimeout(() => onLost?.(), 4000); });
@@ -180,7 +182,7 @@
   }
   const focus = (lat, lng, offX = 0, offY = 0) => map?.easeTo({ center: [lng, lat], offset: [offX, offY], duration: 450 });
   const zoom = (dir) => map?.easeTo({ zoom: map.getZoom() + (dir > 0 ? 1 : -1), duration: 250 });
-  const home = (offY = 0, instant) => map?.easeTo({ center: [office.lng, office.lat], zoom: 16.5, offset: [0, offY], duration: instant ? 0 : 600 });   // jumpTo는 offset을 무시해서 easeTo(0초)
+  const home = (offY = 0, instant) => map?.easeTo({ center: [office.lng, office.lat], zoom: 16.5, bearing: 0, offset: [0, offY], duration: instant ? 0 : 600 });   // jumpTo는 offset을 무시해서 easeTo(0초)
   const setAdding = (on) => { if (map) map.getCanvas().style.cursor = on ? "crosshair" : ""; };
 
   // ───────── 장소 추가 중에만: 주변 식당(공공데이터 상가정보)을 점 + 이름으로 ─────────
@@ -363,10 +365,16 @@
     meEl.style.setProperty("--acc", accPx() + "px");
     return true;
   }
-  // deg: 북쪽 기준 시계 방향(이어지는 각도, 359→361처럼). null이면 방향 표시 숨김. 지도는 회전하지 않아서 그대로 씀
-  function setHeading(deg) { if (!meEl) return; meEl.classList.toggle("has-dir", deg != null); if (deg != null) meEl.style.setProperty("--dir", deg.toFixed(1) + "deg"); }
+  // deg: 북쪽 기준 시계 방향(이어지는 각도, 359→361처럼). null이면 방향 표시 숨김. 지도를 돌려 둔 만큼(bearing) 빼서 화면 방향으로
+  let meHead = null;
+  function applyHeading() { if (!meEl) return; meEl.classList.toggle("has-dir", meHead != null); if (meHead != null) meEl.style.setProperty("--dir", (meHead - (map?.getBearing() || 0)).toFixed(1) + "deg"); }
+  function setHeading(deg) { meHead = deg; applyHeading(); }
+  // 지도 회전 알림 · 북쪽으로 되돌리기 (◉ 내 위치를 누르면 북쪽이 위로, 나침반 버튼은 두지 않음)
+  let rotateCb = null;
+  const onRotate = (cb) => { rotateCb = cb; };
+  const resetNorth = () => map?.easeTo({ bearing: 0, duration: 400 });
   function clearMe() { meMk?.remove(); meMk = meEl = null; }
-  const centerOn = (lat, lng, offY = 0) => map?.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 16.5), offset: [0, offY], duration: 700 });
+  const centerOn = (lat, lng, offY = 0) => map?.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 16.5), bearing: 0, offset: [0, offY], duration: 700 });
   const setZoom = (z) => map?.jumpTo({ zoom: z });
-  window.MapKit = { init, add, focus, zoom, home, setAdding, showStores, project, setMe, setHeading, clearMe, centerOn, setZoom, search, geocode, reverse, showRoute, clearRoute, fitRoute, setSatellite, setMode, satelliteReady, getMode: () => mode, attribution: "" };
+  window.MapKit = { init, add, focus, zoom, home, setAdding, showStores, project, setMe, setHeading, clearMe, centerOn, onRotate, resetNorth, setZoom, search, geocode, reverse, showRoute, clearRoute, fitRoute, setSatellite, setMode, satelliteReady, getMode: () => mode, attribution: "" };
 })();

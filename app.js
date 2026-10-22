@@ -2341,7 +2341,8 @@
     bindMapMode();
     $("#zin").onclick = () => MapKit.zoom(1);
     $("#zout").onclick = () => MapKit.zoom(-1);
-    $("#zme").onclick = () => { startHeading(); startLocate(true); };   // 방향 권한(아이폰)은 누른 순간에 물어야 해서 먼저
+    // ◉ 내 위치: 누르면 북쪽이 위로 돌아오고(두 손가락으로 돌려 놨어도) 내 위치로. 방향 권한(아이폰)은 누른 순간에 물어야 해서 먼저
+    $("#zme").onclick = () => { startHeading(); MapKit.resetNorth?.(); startLocate(true); };
     // 앱 화면·지도는 스크롤되면 안 됨: 브라우저가 포커스 때문에 밀어도 즉시 제자리로 (overflow: clip 미지원 브라우저 대비)
     ["#app", "#map"].forEach((s) => { const el = $(s); el.addEventListener("scroll", () => { if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; } }); });
     // 지도를 움직이거나 휠로 확대하면 정보 카드 숨김
