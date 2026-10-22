@@ -9,6 +9,7 @@
   --on-accent: #fff;          /* 포인트 색 바탕 위 글자 */
   --accent-map: var(--accent);        /* 지도 위(늘 밝은 지도)에 그리는 핀·경로 색 */
   --accent-map-rgb: var(--accent-rgb);
+  --pin-bg: #FDEEEC;          /* 지도 핀 바탕: 흰색에 가까운 포인트 색 틴트 (v69) */
   --ink: #1D1D1F;
   --ink-2: #6E6E73;
   --ink-3: #8E8E93;
@@ -30,8 +31,8 @@
 }
 :root[data-theme="dark"] { --ink: #F5F5F7; --ink-2: #A1A1A6; --ink-3: #8E8E93; --canvas: #1C1C1E; --parchment: #000000; --hair: rgba(84, 84, 88, 0.6); --fill: rgba(118, 118, 128, 0.24); --fill-2: rgba(118, 118, 128, 0.36); --glass: rgba(28, 28, 30, 0.78); }
 /* 포인트 색: 내 정보에서 레드(기본) / 블루 / 흑백 (10/22, v64). index.html 앞부분에서 data-accent를 정함 → 깜빡임 없음 */
-:root[data-accent="blue"] { --accent: #007AFF; --accent-press: #0062CC; --accent-rgb: 0, 122, 255; --accent-tint: rgba(0, 122, 255, 0.14); --accent-soft: #9FD0FF; }
-:root[data-accent="mono"] { --accent: #1D1D1F; --accent-press: #000000; --accent-rgb: 29, 29, 31; --accent-tint: rgba(29, 29, 31, 0.1); --accent-soft: #B4B4B9; }
+:root[data-accent="blue"] { --pin-bg: #ECF4FF; --accent: #007AFF; --accent-press: #0062CC; --accent-rgb: 0, 122, 255; --accent-tint: rgba(0, 122, 255, 0.14); --accent-soft: #9FD0FF; }
+:root[data-accent="mono"] { --pin-bg: #F2F2F3; --accent: #1D1D1F; --accent-press: #000000; --accent-rgb: 29, 29, 31; --accent-tint: rgba(29, 29, 31, 0.1); --accent-soft: #B4B4B9; }
 /* 흑백 + 다크: 버튼은 흰 바탕 검정 글자, 지도(늘 밝음) 위 핀·경로는 그대로 검정 */
 :root[data-theme="dark"][data-accent="mono"] { --accent: #F5F5F7; --accent-press: #D1D1D6; --accent-rgb: 245, 245, 247; --accent-tint: rgba(245, 245, 247, 0.16); --on-accent: #1D1D1F; --accent-map: #1D1D1F; --accent-map-rgb: 29, 29, 31; }
 
@@ -141,20 +142,23 @@ input { font: inherit; color: inherit; }
 .empty { padding: 28px 4px; color: var(--ink-2); font-size: 15px; line-height: 1.6; }
 
 /* ───────── 지도 핀 ───────── */
-.pin { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
-.pin-b { height: 30px; min-width: 30px; padding: 0 9px 0 6px; border-radius: 15px; background: var(--accent-map); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 2px; white-space: nowrap; letter-spacing: -0.01em; transition: transform .15s; }
-.pin-t { width: 10px; height: 6px; background: var(--accent-map); clip-path: polygon(0 0, 100% 0, 50% 100%); margin-top: -1px; }
-.pin-e { font-size: 16px; line-height: 1; }
+.pin { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; filter: drop-shadow(0 1px 3px rgba(0,0,0,.2)); }
+/* 핀 (v69): 흰색에 가까운 포인트 색 틴트 + 얇은 테두리 + 이모지만. 고른 핀만 진한 포인트 색 */
+.pin-b { height: 34px; min-width: 34px; padding: 0 8px; border-radius: 17px; background: var(--pin-bg); color: var(--accent-map); box-shadow: inset 0 0 0 1.5px rgba(var(--accent-map-rgb), .32); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 2px; white-space: nowrap; letter-spacing: -0.01em; transition: transform .15s; }
+.pin-t { width: 10px; height: 6px; background: var(--pin-bg); clip-path: polygon(0 0, 100% 0, 50% 100%); margin-top: -1px; }
+.pin-e { font-size: 18px; line-height: 1; }
 .pin-n { font-size: 12px; }
-.pin.wish .pin-b { background: #fff; color: var(--accent-map); padding: 0 7px; }
+.pin.wish .pin-b { background: #fff; box-shadow: none; padding: 0 7px; }
 .pin.wish .pin-t { background: #fff; }
 .pin-l { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 12px; font-weight: 600; color: #1D1D1F; white-space: nowrap; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; filter: none; }
 .pin.dim { opacity: .3; }
-.pin.on .pin-b { transform: scale(1.18); }
+.pin.on .pin-b { transform: scale(1.18); background: var(--accent-map); color: #fff; box-shadow: none; }
+.pin.on .pin-t { background: var(--accent-map); }
 .pin.on { z-index: 9; }
 .office { display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 2px 5px rgba(0,0,0,.3)); }
 .office .pin-b { background: #3A3A3C; color: #fff; padding: 0 11px; height: 30px; border-radius: 15px; font-size: 13px; }
 .office .pin-t { background: #3A3A3C; }
+.office .pin-b, .ipin .pin-b { box-shadow: none; }   /* 사옥 핀·첫 화면 그림 핀은 테두리 없이 */
 .ghost { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-map); border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(var(--accent-map-rgb), .14), 0 2px 6px rgba(0,0,0,.3); }
 
 /* ───────── 시트 ───────── */
@@ -348,7 +352,7 @@ input { font: inherit; color: inherit; }
   .pin:hover .pin-b { transform: translateY(-2px) scale(1.06); }
   .pin:hover { z-index: 20; }
 }
-.pin .pin-b { transition: transform 180ms var(--ease-out); }
+.pin .pin-b { transition: transform 180ms var(--ease-out), background-color 180ms ease, color 180ms ease; }
 
 /* 3) 핀 등장 — 처음 보일 때만 위에서 살짝 떨어지며 튕김, 순서대로 */
 /* 핀 등장: 핀 자체(지도 위치를 transform으로 잡음)는 투명도만, 움직임은 안쪽 말풍선에만 — 위치가 왼쪽 위로 튀지 않게 */

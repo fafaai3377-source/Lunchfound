@@ -1,6 +1,6 @@
 // foundeat 서비스워커 — 앱으로 설치(PWA), 알림 받기·알림 클릭 처리
 // 앱 파일을 고치면 아래 VERSION 숫자만 올려주세요. 다음 접속 때 새 버전으로 바뀌어요.
-const VERSION = "foundeat-v68";
+const VERSION = "foundeat-v69";
 // foundfoundedmeet처럼 파일 요청은 가로채지 않아요 (fetch 처리 없음) — 아이폰이 홈 화면 아이콘·앱 정보를 직접 받아가게.
 // 예전 버전이 저장해 둔 파일(오프라인 대비용)은 새 버전이 켜질 때 전부 지워요.
 self.addEventListener("install", () => self.skipWaiting());
