@@ -531,7 +531,7 @@
         <div class="tc-ph">${photo ? `<img src="${esc(photo)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" />` : ""}<span>${emojiFor(p)}</span></div>
         <div class="tc-body">
           <div class="tc-name">${esc(p.name)}</div>
-          <div class="tc-line">${esc(p.category || "기타")} · <b>도보 ${wi.min}분</b>${dist}</div>
+          <div class="tc-line">${esc(p.category || "기타")} · <b>도보 ${wi.min}분</b>${dist}${hoursShort(p)}</div>
           <div class="tc-line">${st.count ? `<i class="star">★</i> <b>${st.avg.toFixed(1)}</b> (${st.count})` : "아직 기록 없음"}${st.visits >= 2 ? ` · <span class="again">${IC_AGAIN}방문 ${st.visits}번</span>` : ""}</div>
           ${st.menus.length ? `<div class="tc-line tc-menu"><span class="k">추천 메뉴</span> ${st.menus.map((m) => `<b>${esc(m)}</b>`).join(" · ")}</div>` : ""}
           ${st.picks.length ? `<div class="tc-picks">${st.picks.slice(0, 3).map(([k]) => `<span>${PICKS[k]}</span>`).join("")}</div>` : ""}
@@ -941,6 +941,7 @@
         <div class="stat"><div class="k">혼밥</div><div class="v">${st.solo ? SOLO_S[st.solo] : "–"}</div></div>
         <div class="stat"><div class="k">평균</div><div class="v">${st.price ? `${(st.price / 1000).toFixed(st.price % 1000 ? 1 : 0)}천원` : "–"}</div></div>
       </div>
+      ${hoursHTML(p)}
       <div class="stack">
         ${isGuest() ? `<p class="guest-note">게스트는 둘러보기만 할 수 있어요 · 기록은 파파 멤버만 남겨요</p>` : `<button class="btn btn-primary btn-block" data-act="review">${myFirst ? "또 왔어요 · 내 기록 업데이트" : "기록 남기기"}</button>
         ${mineAny ? "" : `<button class="btn btn-secondary btn-block" data-act="wish">♡ 찜하고 메모 남기기</button>`}
@@ -965,6 +966,7 @@
     const w = $("[data-act=wish]", s); if (w) w.onclick = () => openReviewForm(p.id, "wish");
     bindFav(s);
     const mt = $("[data-act=meet]", s); if (mt) mt.onclick = () => openMeetForm(p.id);
+    $$("[data-act=hours]", s).forEach((b) => (b.onclick = (e) => { e.preventDefault(); openHoursForm(p); }));
     const ci = $("#coverIn", s);
     if (ci) ci.onchange = async () => {
       const file = ci.files[0]; if (!file) return;
@@ -1143,6 +1145,7 @@
       const data = { ...d, images: [], imageIdx: 0, createdBy: state.user.uid, createdByName: state.user.name };
       const id = await state.store.addPlace(data);
       state.pending = { id, ...data, createdAt: Date.now() };
+      autoHours([{ id, ...data }], true);   // 오픈스트리트맵에 영업시간이 있으면 바로 채움
       toast("장소를 저장했어요");
       loadImages(state.pending);
       if (state.mapReady) focusPlace(state.pending);
@@ -1598,6 +1601,114 @@
           }
           toast(full ? "장소 정보를 고쳤어요" : "종류를 고쳤어요"); openPlace(p.id);
         } catch (e) { console.error(e); btn.disabled = false; toast("저장하지 못했어요"); }
+      };
+    };
+    render();
+  }
+
+  // ───────── 영업시간 (10/22, v66) — 멤버가 입력 + 오픈스트리트맵에 있으면 자동으로 (hours.js) ─────────
+  const tsMs = (x) => (typeof x === "number" ? x : x?.toMillis?.() ?? (x?._seconds ? x._seconds * 1000 : x?.seconds ? x.seconds * 1000 : 0));
+  // 정보 카드 한 줄: " · 영업 중" 처럼 짧게
+  const hoursShort = (p) => { const st = window.Hours?.status(p.hours); return st ? ` · <span class="hs hs-${st.kind}">${st.short}</span>` : ""; };
+  function hoursHTML(p) {
+    const H = window.Hours, h = p.hours;
+    if (!H) return "";
+    const edit = (label) => (isGuest() ? "" : `<button class="link" data-act="hours">${label}</button>`);
+    if (!H.has(h)) return `<div class="hours-box none"><span>영업시간 정보가 없어요</span>${edit("영업시간 추가")}</div>`;
+    const st = H.status(h), di = H.dayIdx(new Date());
+    const lunch = di < 5 ? H.lunchOK(h, di, minsOf(LUNCH.start), minsOf(LUNCH.end)) : null;
+    const src = h.src === "osm" ? "오픈스트리트맵 정보 · © OpenStreetMap 기여자" : `${h.by ? `${esc(h.by)}님이 입력` : "멤버가 입력"}${tsMs(h.at) ? ` · ${md(tsMs(h.at))}` : ""}`;
+    return `<details class="hours-box"><summary><span class="hs hs-${st.kind}">${st.text}</span>${st.kind === "off" ? "" : `<span class="hours-today">오늘 ${H.pretty(h[H.DAYS[di]])}</span>`}</summary>
+      <ol class="hours-week">${H.DAYS.map((d, i) => `<li${i === di ? ' class="today"' : ""}><span>${H.KO[i]}</span><span>${H.pretty(h[d])}</span></li>`).join("")}</ol>
+      ${h.note ? `<p class="hours-note">${esc(h.note)}</p>` : ""}
+      <p class="hours-src">${src}${isGuest() ? "" : ` · ${edit("수정")}`}</p></details>
+      ${lunch === false ? `<p class="hours-warn">오늘 점심시간(${LUNCH.start}~${LUNCH.end})엔 영업하지 않아요</p>` : ""}`;
+  }
+  // 저장: 미리보기는 이 브라우저에, 실제 서비스는 /api/place가 로그인 확인 후 대신 저장 (보안 규칙상 멤버는 가게 정보를 직접 못 바꿈)
+  async function saveHours(id, hours, note, src, extra = {}) {
+    if (state.store.demo) return state.store.updatePlace(id, { hours: hours ? { ...hours, note, src, by: src === "osm" ? "" : state.user.name, at: Date.now(), ...extra } : null });
+    const t = await state.store.idToken();
+    const r = await fetch("/api/place", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ op: "hours", id, hours, note, src, ...extra }) });
+    if (!r.ok) { const e = new Error((await r.json().catch(() => ({}))).error || "FAIL"); e.status = r.status; throw e; }
+  }
+  // 오픈스트리트맵 자동 채우기: 영업시간이 없는 가게만, 이 기기에서 하루 한 번 (새로 등록한 가게는 바로). 멤버가 입력한 건 덮어쓰지 않음
+  let osmList = null;
+  async function autoHours(list, force = false) {
+    if (isGuest() || !window.Hours || !list?.length) return 0;
+    if (!force) { try { if (Date.now() - (+localStorage.getItem("lunchfound-osm-at") || 0) < 864e5) return 0; localStorage.setItem("lunchfound-osm-at", String(Date.now())); } catch {} }
+    const todo = list.filter((p) => !Hours.has(p.hours));
+    if (!todo.length) return 0;
+    try {
+      if (!osmList) {
+        const r = await fetch(`/api/osm-hours?lat=${(+C.office.lat).toFixed(3)}&lng=${(+C.office.lng).toFixed(3)}`);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        osmList = (await r.json()).items || [];
+      }
+    } catch (e) { console.warn("[foundeat] 오픈스트리트맵 영업시간을 받지 못했어요", e.message); return 0; }
+    let n = 0;
+    for (const p of todo.slice(0, 80)) {
+      const m = Hours.match(p, osmList), hrs = m && Hours.parseOSM(m.it.oh);
+      if (!hrs) continue;
+      try { await saveHours(p.id, hrs, "", "osm", { osm: String(m.it.oh).slice(0, 200), osmName: String(m.it.n || "").slice(0, 60) }); n++; }
+      catch (e) { if (e.status !== 409) console.warn("[foundeat] 영업시간 자동 저장 실패", p.name, e.message); }
+    }
+    if (n) console.info(`[foundeat] 오픈스트리트맵에서 영업시간 ${n}곳을 채웠어요`);
+    return n;
+  }
+  // 영업시간 입력 (멤버 누구나): 매일 같아요 / 요일마다 달라요 + 브레이크타임 + 쉬는 날 + 메모
+  function openHoursForm(p) {
+    const H = Hours, h = H.has(p.hours) ? p.hours : null;
+    const f = { mode: "same", o: "11:00", c: "21:00", bo: "", bc: "", off: new Set(), each: H.DAYS.map(() => ({ o: "11:00", c: "21:00", off: false })), note: h?.note || "" };
+    if (h) {
+      const split = (v) => { const r = v.split(","), o = r[0].split("-")[0], c = r[r.length - 1].split("-")[1]; return { o, c, bo: r.length > 1 ? r[0].split("-")[1] : "", bc: r.length > 1 ? r[1].split("-")[0] : "" }; };
+      const vs = H.DAYS.map((d) => String(h[d] || "")), open = vs.filter(Boolean);
+      if (open.length) { const x = split(open[0]); Object.assign(f, { o: x.o, c: x.c, bo: x.bo, bc: x.bc }); }
+      f.mode = open.every((v) => v === open[0]) ? "same" : "each";
+      vs.forEach((v, i) => { if (!v) { f.off.add(i); f.each[i].off = true; } else { const x = split(v); f.each[i] = { o: x.o, c: x.c, off: false }; } });
+    }
+    const tIn = (k, v, i) => `<input class="input time" type="time" step="300" data-t="${k}"${i != null ? ` data-i="${i}"` : ""} value="${esc(v || "")}" aria-label="${k === "o" ? "여는 시간" : k === "c" ? "닫는 시간" : k === "bo" ? "브레이크 시작" : "브레이크 끝"}" />`;
+    const render = () => {
+      const s = showSheet(`
+        ${head("영업시간", `<span>${esc(p.name)} · 모든 멤버에게 바로 보여요</span>`)}
+        <div class="seg" role="group" aria-label="입력 방식" style="margin-top:14px"><button data-hm="same" aria-pressed="${f.mode === "same"}">매일 같아요</button><button data-hm="each" aria-pressed="${f.mode === "each"}">요일마다 달라요</button></div>
+        ${f.mode === "same" ? `<div class="field"><span class="flabel">영업 시간</span><div class="trow">${tIn("o", f.o)}<span class="tsep">~</span>${tIn("c", f.c)}</div></div>
+          <div class="field"><span class="flabel">쉬는 날 <span class="opt">없으면 비워 두세요</span></span><div class="chips">${H.KO.map((k, i) => `<button class="chip" data-off="${i}" aria-pressed="${f.off.has(i)}">${k}</button>`).join("")}</div></div>`
+        : `<div class="field"><span class="flabel">요일별 영업 시간</span><div class="hours-each">${H.KO.map((k, i) => { const e = f.each[i]; return `<div class="trow"><span class="dl">${k}</span>${e.off ? `<span class="off-t">쉬는 날</span>` : `${tIn("o", e.o, i)}<span class="tsep">~</span>${tIn("c", e.c, i)}`}<button class="chip sm" data-eoff="${i}" aria-pressed="${e.off}">휴무</button></div>`; }).join("")}</div></div>`}
+        <div class="field"><span class="flabel">브레이크타임 <span class="opt">선택 · 영업하는 날 모두</span></span><div class="trow">${tIn("bo", f.bo)}<span class="tsep">~</span>${tIn("bc", f.bc)}${f.bo || f.bc ? `<button class="link" data-brk-clear>없음</button>` : ""}</div></div>
+        <div class="field"><label class="flabel" for="hNote">메모 <span class="opt">선택</span></label><input class="input" id="hNote" maxlength="40" placeholder="예: 라스트오더 20:30 · 공휴일 휴무" value="${esc(f.note)}" /></div>
+        <p class="err" id="hErr"></p>
+        <div class="stack" style="margin-top:14px"><button class="btn btn-primary btn-block" id="hSave">저장</button><button class="btn btn-plain btn-block" id="hBack">취소</button></div>
+        ${h ? `<button class="del" id="hDel" style="margin-top:14px">영업시간 지우기</button>` : ""}`, "hours");
+      $$("[data-hm]", s).forEach((b) => (b.onclick = () => { if (f.mode === b.dataset.hm) return; if (b.dataset.hm === "each") f.each = f.each.map((e, i) => ({ o: f.o, c: f.c, off: f.off.has(i) })); else { const fo = f.each.find((e) => !e.off); if (fo) { f.o = fo.o; f.c = fo.c; } f.off = new Set(f.each.map((e, i) => (e.off ? i : -1)).filter((i) => i >= 0)); } f.mode = b.dataset.hm; render(); }));
+      $$("[data-off]", s).forEach((b) => (b.onclick = () => { const i = +b.dataset.off; f.off.has(i) ? f.off.delete(i) : f.off.add(i); b.setAttribute("aria-pressed", f.off.has(i)); }));
+      $$("[data-eoff]", s).forEach((b) => (b.onclick = () => { const e = f.each[+b.dataset.eoff]; e.off = !e.off; render(); }));
+      $$("[data-t]", s).forEach((inp) => (inp.oninput = inp.onchange = () => { const k = inp.dataset.t, v = inp.value; if (inp.dataset.i != null) f.each[+inp.dataset.i][k] = v; else f[k] = v; }));
+      const bc = $("[data-brk-clear]", s); if (bc) bc.onclick = () => { f.bo = f.bc = ""; render(); };
+      $("#hNote", s).oninput = (e) => (f.note = e.target.value);
+      $("#hBack", s).onclick = () => openPlace(p.id);
+      const del = $("#hDel", s);
+      if (del) del.onclick = async () => { if (!confirm("이 가게의 영업시간을 지울까요?")) return; try { await saveHours(p.id, null, "", "member"); toast("영업시간을 지웠어요"); openPlace(p.id); } catch (e) { console.error(e); toast("지우지 못했어요"); } };
+      $("#hSave", s).onclick = async () => {
+        const err = (m) => { $("#hErr", s).textContent = m; };
+        if (!!f.bo !== !!f.bc) return err("브레이크타임은 시작과 끝을 모두 적거나 비워 주세요.");
+        const day = (o, c) => {
+          if (!o || !c) return null;
+          const om = H.mins(o); let cm = H.mins(c); if (cm <= om) cm += 1440;
+          let bo = f.bo ? H.mins(f.bo) : NaN, bc = f.bc ? H.mins(f.bc) : NaN;
+          if (bo < om) bo += 1440; if (bc < om) bc += 1440;
+          return f.bo && bo > om && bc > bo && bc < cm ? `${o}-${f.bo},${f.bc}-${c}` : `${o}-${c}`;
+        };
+        const hours = {};
+        for (let i = 0; i < 7; i++) {
+          const e = f.mode === "same" ? { o: f.o, c: f.c, off: f.off.has(i) } : f.each[i];
+          if (e.off) { hours[H.DAYS[i]] = ""; continue; }
+          const v = day(e.o, e.c); if (!v) return err(`${H.KO[i]}요일 여는 시간과 닫는 시간을 모두 적어주세요.`);
+          hours[H.DAYS[i]] = v;
+        }
+        if (H.DAYS.every((d) => !hours[d])) return err("모든 요일이 쉬는 날이에요. 영업하는 날을 하나 이상 남겨 주세요.");
+        const btn = $("#hSave", s); btn.disabled = true;
+        try { await saveHours(p.id, hours, f.note.replace(/\s+/g, " ").trim().slice(0, 40), "member"); toast("영업시간을 저장했어요"); openPlace(p.id); }
+        catch (e) { console.error(e); btn.disabled = false; toast("저장하지 못했어요"); }
       };
     };
     render();
@@ -2223,7 +2334,7 @@
       if (state.pending && places.some((p) => p.id === state.pending.id)) state.pending = null;
       renderAll();
       // 첫 데이터 때 한 번만: 지도가 이미 떠 있으면 목록 패널이 자리 잡은 뒤(0.3초) 사옥을 가운데로. 지도가 나중에 뜨면 initMap이 직접 맞춤
-      if (firstView) { firstView = false; if (state.mapReady) setTimeout(() => homeView(true), 450); setTimeout(maybeGuide, 1600); }
+      if (firstView) { firstView = false; if (state.mapReady) setTimeout(() => homeView(true), 450); setTimeout(maybeGuide, 1600); setTimeout(() => autoHours(state.places), 6000); }
     }, (code) => {
       // 목록을 받다가 오류: 로그인 만료(권한)면 토큰을 새로 받아 한 번 더, 그 밖엔 연결 문제로 안내
       console.error("[foundeat] 가게 목록 오류:", code);

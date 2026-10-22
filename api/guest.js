@@ -43,7 +43,8 @@ module.exports = async (req, res) => {
       const p = d.data(), views = {};
       Object.keys(p.views || {}).forEach((k, i) => (views["v" + i] = true));   // 본 멤버 수만 남김
       return { ...p, id: d.id, createdAt: ms(p.createdAt), createdBy: "", createdByName: "", catBy: "", catAt: 0, views,
-        images: (p.images || []).map((im) => ({ ...im, by: "", uid: "" })) };
+        images: (p.images || []).map((im) => ({ ...im, by: "", uid: "" })),
+        ...(p.hours ? { hours: { ...p.hours, by: "", at: ms(p.hours.at) } } : {}) };
     });
     return res.status(200).json({ places, reviews });
   } catch (e) {
